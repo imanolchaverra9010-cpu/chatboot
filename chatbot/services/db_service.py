@@ -19,7 +19,7 @@ class DatabaseService:
     # ==================== MÉTODOS PARA NEGOCIOS ====================
     
     @staticmethod
-    def buscar_negocios(query=None, categoria=None, ciudad='Quibdó', activos=True, limit=10):
+    def buscar_negocios(query=None, categoria=None, ciudad='Quibdó', activos=True, limit=1000):
         """
         Buscar negocios por nombre, categoría o ciudad
         
@@ -135,7 +135,7 @@ class DatabaseService:
             return {'abierto': None, 'mensaje': 'Error al verificar horario'}
     
     @staticmethod
-    def obtener_productos_negocio(negocio_id, disponibles=True, limit=20):
+    def obtener_productos_negocio(negocio_id, disponibles=True, limit=1000):
         """
         Obtener productos/servicios de un negocio
         
@@ -202,7 +202,7 @@ class DatabaseService:
             return []
     
     @staticmethod
-    def obtener_resenas_negocio(negocio_id, aprobadas=True, limit=5):
+    def obtener_resenas_negocio(negocio_id, aprobadas=True, limit=1000):
         """
         Obtener reseñas de un negocio
         
@@ -263,7 +263,7 @@ class DatabaseService:
             return None
     
     @staticmethod
-    def buscar_negocios_cercanos(barrio=None, referencia=None, limit=10):
+    def buscar_negocios_cercanos(barrio=None, referencia=None, limit=1000):
         """
         Buscar negocios por ubicación aproximada
         
@@ -336,7 +336,7 @@ class DatabaseService:
         return None
     
     @staticmethod
-    def listar_productos(categoria=None, disponibles=True, limit=10):
+    def listar_productos(categoria=None, disponibles=True, limit=1000):
         """Listar productos con filtros opcionales"""
         try:
             query = Producto.objects.filter(activo=True)
@@ -386,7 +386,7 @@ class DatabaseService:
             return False
     
     @staticmethod
-    def obtener_pedidos_cliente(cliente_id, limit=5):
+    def obtener_pedidos_cliente(cliente_id, limit=1000):
         """Obtener pedidos de un cliente"""
         try:
             return Pedido.objects.filter(
@@ -427,4 +427,5 @@ class DatabaseService:
                 ]
         except Exception as e:
             logger.error(f"Error en consulta raw: {e}")
+
             return []
