@@ -1,5 +1,5 @@
 """
-Servicio para consultar la base de datos de Negocios
+Servicio MEJORADO para consultar la base de datos de Negocios
 """
 import logging
 from django.db import connection
@@ -14,7 +14,7 @@ logger = logging.getLogger('chatbot')
 
 
 class DatabaseService:
-    """Servicio para operaciones de base de datos"""
+    """Servicio para operaciones de base de datos - VERSIÓN MEJORADA"""
     
     # ==================== MÉTODOS PARA NEGOCIOS ====================
     
@@ -22,16 +22,6 @@ class DatabaseService:
     def buscar_negocios(query=None, categoria=None, ciudad='Quibdó', activos=True, limit=1000):
         """
         Buscar negocios por nombre, categoría o ciudad
-        
-        Args:
-            query: Texto de búsqueda (nombre o descripción)
-            categoria: Filtrar por categoría
-            ciudad: Ciudad (default: Quibdó)
-            activos: Solo negocios activos
-            limit: Número máximo de resultados
-        
-        Returns:
-            QuerySet de negocios
         """
         try:
             negocios = Negocio.objects.all()
@@ -49,7 +39,8 @@ class DatabaseService:
                 negocios = negocios.filter(
                     Q(nombre__icontains=query) | 
                     Q(descripcion__icontains=query) |
-                    Q(categoria__icontains=query)
+                    Q(categoria__icontains=query) |
+                    Q(barrio__icontains=query)
                 )
             
             return negocios.order_by('-verificado', 'nombre')[:limit]
@@ -59,12 +50,7 @@ class DatabaseService:
     
     @staticmethod
     def obtener_negocio_por_id(negocio_id):
-        """
-        Obtener negocio específico por ID
-        
-        Returns:
-            Negocio object o None
-        """
+        """Obtener negocio específico por ID"""
         try:
             return Negocio.objects.get(id=negocio_id, activo=True)
         except Negocio.DoesNotExist:
@@ -74,13 +60,32 @@ class DatabaseService:
             return None
     
     @staticmethod
+    def obtener_negocio_por_nombre(nombre):
+        """Buscar negocio por nombre exacto o similar"""
+        try:
+            # Primero intenta nombre exacto
+            negocio = Negocio.objects.filter(
+                nombre__iexact=nombre,
+                activo=True
+            ).first()
+            
+            if negocio:
+                return negocio
+            
+            # Si no, busca similar
+            negocio = Negocio.objects.filter(
+                nombre__icontains=nombre,
+                activo=True
+            ).first()
+            
+            return negocio
+        except Exception as e:
+            logger.error(f"Error obteniendo negocio por nombre: {e}")
+            return None
+    
+    @staticmethod
     def obtener_horarios_negocio(negocio_id):
-        """
-        Obtener horarios de atención de un negocio
-        
-        Returns:
-            QuerySet de horarios
-        """
+        """Obtener horarios de atención de un negocio"""
         try:
             return HorarioAtencion.objects.filter(negocio_id=negocio_id).order_by('dia_semana')
         except Exception as e:
@@ -89,12 +94,7 @@ class DatabaseService:
     
     @staticmethod
     def verificar_negocio_abierto(negocio_id):
-        """
-        Verificar si un negocio está abierto en el momento actual
-        
-        Returns:
-            Dict con información de apertura
-        """
+        """Verificar si un negocio está abierto en el momento actual"""
         try:
             dias_map = {
                 0: 'lunes', 1: 'martes', 2: 'miercoles', 3: 'jueves',
@@ -136,12 +136,7 @@ class DatabaseService:
     
     @staticmethod
     def obtener_productos_negocio(negocio_id, disponibles=True, limit=1000):
-        """
-        Obtener productos/servicios de un negocio
-        
-        Returns:
-            QuerySet de productos
-        """
+        """Obtener productos/servicios de un negocio"""
         try:
             productos = ProductoNegocio.objects.filter(
                 negocio_id=negocio_id,
@@ -158,32 +153,39 @@ class DatabaseService:
     
     @staticmethod
     def buscar_productos_negocio(negocio_id, query):
-        """
-        Buscar productos específicos en un negocio
-        
-        Returns:
-            QuerySet de productos
-        """
+        """Buscar productos específicos en un negocio"""
         try:
             return ProductoNegocio.objects.filter(
                 negocio_id=negocio_id,
                 activo=True,
                 disponible=True
             ).filter(
-                Q(nombre__icontains=query) | Q(descripcion__icontains=query)
+                Q(nombre__icontains=query) | 
+                Q(descripcion__icontains=query) |
+                Q(categoria__icontains=query)
             )
         except Exception as e:
             logger.error(f"Error buscando productos: {e}")
             return []
     
     @staticmethod
+    def buscar_productos_globalmente(query, limit=20):
+        """Buscar productos en todos los negocios"""
+        try:
+            return ProductoNegocio.objects.filter(
+                Q(nombre__icontains=query) | 
+                Q(descripcion__icontains=query) |
+                Q(categoria__icontains=query),
+                activo=True,
+                disponible=True
+            ).select_related('negocio').order_by('-destacado', 'nombre')[:limit]
+        except Exception as e:
+            logger.error(f"Error buscando productos globalmente: {e}")
+            return []
+    
+    @staticmethod
     def obtener_categorias_negocios():
-        """
-        Obtener lista de categorías de negocios
-        
-        Returns:
-            QuerySet de categorías
-        """
+        """Obtener lista de categorías de negocios"""
         try:
             # Primero intentar con tabla de categorías
             categorias_tabla = CategoriaNegocio.objects.filter(activo=True).order_by('orden', 'nombre')
@@ -203,12 +205,7 @@ class DatabaseService:
     
     @staticmethod
     def obtener_resenas_negocio(negocio_id, aprobadas=True, limit=1000):
-        """
-        Obtener reseñas de un negocio
-        
-        Returns:
-            QuerySet de reseñas
-        """
+        """Obtener reseñas de un negocio"""
         try:
             resenas = ResenaNegocio.objects.filter(negocio_id=negocio_id)
             
@@ -222,12 +219,7 @@ class DatabaseService:
     
     @staticmethod
     def obtener_calificacion_promedio(negocio_id):
-        """
-        Obtener calificación promedio de un negocio
-        
-        Returns:
-            Float con promedio o None
-        """
+        """Obtener calificación promedio de un negocio"""
         try:
             resultado = ResenaNegocio.objects.filter(
                 negocio_id=negocio_id,
@@ -241,12 +233,7 @@ class DatabaseService:
     
     @staticmethod
     def crear_resena(negocio_id, telefono_cliente, calificacion, comentario='', nombre_cliente=''):
-        """
-        Crear una nueva reseña
-        
-        Returns:
-            ResenaNegocio object o None
-        """
+        """Crear una nueva reseña"""
         try:
             resena = ResenaNegocio.objects.create(
                 negocio_id=negocio_id,
@@ -256,20 +243,55 @@ class DatabaseService:
                 comentario=comentario,
                 aprobado=False  # Requiere aprobación
             )
-            logger.info(f"Reseña creada: {resena.id}")
+            logger.info(f"Reseña creada: {resena.id} para negocio {negocio_id}")
             return resena
         except Exception as e:
             logger.error(f"Error creando reseña: {e}")
             return None
     
     @staticmethod
+    def obtener_estadisticas_negocio(negocio_id):
+        """Obtener estadísticas completas de un negocio"""
+        try:
+            negocio = Negocio.objects.get(id=negocio_id)
+            
+            # Cantidad de productos
+            total_productos = ProductoNegocio.objects.filter(
+                negocio_id=negocio_id,
+                activo=True
+            ).count()
+            
+            # Cantidad de reseñas
+            total_resenas = ResenaNegocio.objects.filter(
+                negocio_id=negocio_id,
+                aprobado=True
+            ).count()
+            
+            # Calificación promedio
+            calificacion_promedio = DatabaseService.obtener_calificacion_promedio(negocio_id)
+            
+            # Distribución de calificaciones
+            distribucion = ResenaNegocio.objects.filter(
+                negocio_id=negocio_id,
+                aprobado=True
+            ).values('calificacion').annotate(
+                cantidad=Count('id')
+            ).order_by('-calificacion')
+            
+            return {
+                'negocio': negocio,
+                'total_productos': total_productos,
+                'total_resenas': total_resenas,
+                'calificacion_promedio': calificacion_promedio,
+                'distribucion_calificaciones': list(distribucion)
+            }
+        except Exception as e:
+            logger.error(f"Error obteniendo estadísticas: {e}")
+            return None
+    
+    @staticmethod
     def buscar_negocios_cercanos(barrio=None, referencia=None, limit=1000):
-        """
-        Buscar negocios por ubicación aproximada
-        
-        Returns:
-            QuerySet de negocios
-        """
+        """Buscar negocios por ubicación aproximada"""
         try:
             negocios = Negocio.objects.filter(activo=True)
             
@@ -289,12 +311,7 @@ class DatabaseService:
     
     @staticmethod
     def obtener_info_completa_negocio(negocio_id):
-        """
-        Obtener información completa de un negocio
-        
-        Returns:
-            Dict con toda la información
-        """
+        """Obtener información completa de un negocio"""
         try:
             negocio = Negocio.objects.get(id=negocio_id, activo=True)
             horarios = list(HorarioAtencion.objects.filter(negocio=negocio))
@@ -305,19 +322,62 @@ class DatabaseService:
             
             calificacion = DatabaseService.obtener_calificacion_promedio(negocio_id)
             estado_apertura = DatabaseService.verificar_negocio_abierto(negocio_id)
+            resenas = list(DatabaseService.obtener_resenas_negocio(negocio_id, limit=5))
             
             return {
                 'negocio': negocio,
                 'horarios': horarios,
                 'productos': productos,
                 'calificacion_promedio': calificacion,
-                'estado_apertura': estado_apertura
+                'estado_apertura': estado_apertura,
+                'resenas_recientes': resenas
             }
         except Negocio.DoesNotExist:
             return None
         except Exception as e:
             logger.error(f"Error obteniendo info completa: {e}")
             return None
+    
+    @staticmethod
+    def obtener_negocios_abiertos_ahora(categoria=None):
+        """Obtener lista de negocios que están abiertos en este momento"""
+        try:
+            dias_map = {
+                0: 'lunes', 1: 'martes', 2: 'miercoles', 3: 'jueves',
+                4: 'viernes', 5: 'sabado', 6: 'domingo'
+            }
+            
+            ahora = datetime.now()
+            dia_actual = dias_map[ahora.weekday()]
+            hora_actual = ahora.time()
+            
+            # Obtener horarios de hoy
+            horarios_hoy = HorarioAtencion.objects.filter(
+                dia_semana=dia_actual,
+                cerrado=False,
+                hora_apertura__lte=hora_actual,
+                hora_cierre__gte=hora_actual
+            ).select_related('negocio')
+            
+            # Filtrar por categoría si se especifica
+            if categoria:
+                horarios_hoy = horarios_hoy.filter(
+                    negocio__categoria__icontains=categoria
+                )
+            
+            # Extraer negocios únicos
+            negocios_abiertos = []
+            negocios_ids = set()
+            
+            for horario in horarios_hoy:
+                if horario.negocio.activo and horario.negocio.id not in negocios_ids:
+                    negocios_abiertos.append(horario.negocio)
+                    negocios_ids.add(horario.negocio.id)
+            
+            return negocios_abiertos
+        except Exception as e:
+            logger.error(f"Error obteniendo negocios abiertos: {e}")
+            return []
     
     # ==================== MÉTODOS ORIGINALES (COMPATIBILIDAD) ====================
     
@@ -413,19 +473,3 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error obteniendo detalle pedido: {e}")
             return None
-    
-    @staticmethod
-    def ejecutar_consulta_raw(query, params=None):
-        """Ejecutar consulta SQL personalizada (usar con precaución)"""
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(query, params or [])
-                columns = [col[0] for col in cursor.description]
-                return [
-                    dict(zip(columns, row))
-                    for row in cursor.fetchall()
-                ]
-        except Exception as e:
-            logger.error(f"Error en consulta raw: {e}")
-
-            return []
