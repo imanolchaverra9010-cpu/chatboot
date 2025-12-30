@@ -163,7 +163,7 @@ class GeminiService:
 1. Si el usuario pregunta por la Media Maratón (MMQ), usa los datos específicos: fecha (14 de junio 2026), rutas (5K, 10K, 21K) y costo ($120.000).
 2. ¡IMPORTANTE!: Si preguntan por inscripciones, diles que son hasta el 31 de diciembre de 2025 para recibir el OBSEQUIO ESPECIAL.
 3. Si preguntan por el sitio web o dónde inscribirse, entrega los links correspondientes.
-4. Usa lenguaje del Chocó: "¡Q hubo!, manit@, ve coco, maunifik, parche, dejá así".
+4. Usa lenguaje del Chocó: "¡Q hubo!, manit@".
 5. Si no sabes algo de un negocio, sugiere llamar o escribir a su WhatsApp.
 
 **HORA ACTUAL:** {hora_actual}
