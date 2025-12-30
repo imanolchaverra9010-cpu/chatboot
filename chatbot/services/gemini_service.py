@@ -1,5 +1,5 @@
 """
-Servicio mejorado para interactuar con Google Gemini AI - COMPLETO PARA NEGOCIOS
+Servicio mejorado para interactuar con Google Gemini AI - COMPLETO PARA NEGOCIOS Y MMQ
 """
 import logging
 import google.generativeai as genai
@@ -10,7 +10,6 @@ import re
 import json
 
 logger = logging.getLogger('chatbot')
-
 
 class GeminiService:
     
@@ -38,10 +37,14 @@ class GeminiService:
     
     def _detectar_intencion(self, message):
         """
-        Detecta la intención del usuario para respuestas más precisas
+        Detecta la intención del usuario incluyendo la Media Maratón
         """
         msg_lower = message.lower()
         
+        # Prioridad: Detección de la Maratón
+        if any(word in msg_lower for word in ['maraton', 'maratón', 'mmq', 'carrera', 'correr', 'quibdo corre']):
+            return 'maraton_quibdo'
+
         intenciones = {
             'buscar_negocio': ['restaurante', 'negocio', 'lugar', 'donde', 'encuentra', 'conoces', 'hay'],
             'buscar_producto': ['producto', 'plato', 'vende', 'menu', 'menú', 'comida', 'precio', 'cuanto cuesta'],
@@ -57,232 +60,119 @@ class GeminiService:
                 return intencion
         
         return 'general'
-    
+
+    def _obtener_info_maraton(self):
+        """
+        Base de datos estática para la Media Maratón de Quibdó
+        """
+        return """
+        INFORMACIÓN MEDIA MARATÓN QUIBDÓ (MMQ):
+        - Descripción: Evento deportivo urbano para cultivar la paz, bienestar y estilos de vida saludables.
+        - Misión: Fomentar cultura deportiva, salud física y mental, y visibilizar gimnasios/grupos al aire libre.
+        - Visión: Ser impulsores líderes de hábitos saludables con valores de respeto y tolerancia.
+        - Rutas: 5 Kilómetros, 10 Kilómetros y 21 Kilómetros.
+        - Categorías: Infantil (2-15 años), Juvenil (16-19), Abierta (20-49), Élite (Mayores de 18) y Máster (50+ años).
+        - Géneros: Masculino, Femenino y Niños.
+        - Fecha del evento: Domingo, 14 de junio de 2026.
+        - Ubicación: Quibdó, Chocó, Colombia.
+        - Inscripciones: Abiertas del 26/11/2025 al 31/12/2025.
+        - Costo: $ 120.000 para todas las categorías.
+        - Beneficio Preventa: Los inscritos antes del 31 de diciembre de 2025 recibirán un obsequio especial.
+        - El KIT incluye: Camiseta, Medalla, Dorsal, Chip e Hidratación.
+        - Sitio Web Oficial: https://mediamaratondequibdo.com/eventos/
+        - Link de Inscripción: https://respira.run/media-maraton-quibdo
+        """
+
     def _extraer_informacion_negocios(self, message, intencion='general'):
-        """
-        Extrae información relevante de negocios de forma inteligente según la intención
-        """
         context = ""
         msg_clean = message.lower().strip()
         
-        # Normalizar texto
+        # Normalizar texto para búsqueda en DB
         msg_normalized = re.sub(r'(restaurantes|comiditas|sitios de comida)', 'restaurante', msg_clean)
-        msg_normalized = re.sub(r'(farmacias|droguerias)', 'farmacia', msg_normalized)
-        msg_normalized = re.sub(r'(tiendas|supermercados|mercados)', 'supermercado', msg_normalized)
         
         try:
-            # INTENCIÓN: RESEÑA
             if intencion == 'resena':
-                context += "\n\n📝 **SISTEMA DE RESEÑAS DISPONIBLE:**\n"
-                context += "Para dejar una reseña, dime:\n"
-                context += "1. El nombre del negocio\n"
-                context += "2. Tu calificación (1-5 estrellas)\n"
-                context += "3. Tu comentario (opcional)\n"
-                context += "Ejemplo: 'Quiero calificar a BOGA con 5 estrellas, excelente comida'\n\n"
+                context += "\n\n📝 **SISTEMA DE RESEÑAS:** Pide nombre de negocio, estrellas (1-5) y comentario.\n"
             
-            # INTENCIÓN: CATEGORÍAS
-            if intencion == 'categorias' or any(word in msg_clean for word in ['categoría', 'categoria', 'qué hay', 'que hay']):
+            if intencion == 'categorias':
                 categorias = self.db_service.obtener_categorias_negocios()
                 if categorias:
-                    context += "\n\n🏷️ **CATEGORÍAS DISPONIBLES:**\n"
-                    context += ", ".join([c.nombre if hasattr(c, 'nombre') else str(c) for c in categorias])
-                    context += "\n\n"
-            
-            # BUSCAR CATEGORÍA ESPECÍFICA
-            categorias_disponibles = self.db_service.obtener_categorias_negocios()
-            categoria_encontrada = None
-            
-            for cat in categorias_disponibles:
-                nombre_cat = cat.nombre.lower() if hasattr(cat, 'nombre') else str(cat).lower()
-                if nombre_cat in msg_normalized:
-                    categoria_encontrada = nombre_cat
-                    break
-            
-            # OBTENER NEGOCIOS
-            negocios = self.db_service.buscar_negocios(
-                query=None if categoria_encontrada else msg_clean,
-                categoria=categoria_encontrada,
-                limit=10
-            )
-            
+                    context += "\n🏷️ CATEGORÍAS: " + ", ".join([str(c) for c in categorias]) + "\n"
+
+            negocios = self.db_service.buscar_negocios(query=msg_clean, limit=5)
             if negocios:
-                context += "\n\n🏪 **NEGOCIOS ENCONTRADOS:**\n"
+                context += "\n🏪 NEGOCIOS ENCONTRADOS:\n"
                 for neg in negocios:
-                    # Información básica del negocio
-                    context += f"\n**{neg.nombre.upper()}**"
-                    if neg.verificado:
-                        context += " ✅ (Verificado)"
-                    context += f"\n📂 {neg.categoria if neg.categoria else 'General'}\n"
-                    
-                    # Estado de apertura
-                    if intencion in ['horarios', 'general', 'buscar_negocio']:
-                        estado = self.db_service.verificar_negocio_abierto(neg.id)
-                        emoji_estado = "🟢 ABIERTO" if estado['abierto'] else "🔴 CERRADO"
-                        context += f"⏰ Estado: {emoji_estado} - {estado['mensaje']}\n"
-                    
-                    # Ubicación
-                    if intencion in ['ubicacion', 'general', 'buscar_negocio']:
-                        context += f"📍 Dirección: {neg.direccion}"
-                        if neg.barrio:
-                            context += f" - {neg.barrio}"
-                        context += "\n"
-                        if neg.referencia_ubicacion:
-                            context += f"🗺️ Referencia: {neg.referencia_ubicacion}\n"
-                    
-                    # Contacto
-                    if intencion in ['contacto', 'general', 'buscar_negocio']:
-                        if neg.telefono:
-                            context += f"📞 Teléfono: {neg.telefono}\n"
-                        if neg.whatsapp:
-                            context += f"💬 WhatsApp: {neg.whatsapp}\n"
-                    
-                    # Productos/Menú
-                    if intencion in ['buscar_producto', 'general']:
-                        productos = self.db_service.obtener_productos_negocio(neg.id, limit=5)
-                        if productos:
-                            context += f"🍽️ Algunos productos destacados:\n"
-                            for prod in productos:
-                                context += f"  • {prod.nombre}"
-                                if prod.precio:
-                                    context += f" - {prod.get_precio_display()}"
-                                context += "\n"
-                    
-                    # Reseñas y calificación
-                    calificacion = self.db_service.obtener_calificacion_promedio(neg.id)
-                    if calificacion:
-                        estrellas = "⭐" * int(round(calificacion))
-                        context += f"⭐ Calificación: {calificacion:.1f}/5 {estrellas}\n"
-                    
-                    context += "\n"
-            
-            # BUSCAR PRODUCTOS ESPECÍFICOS
-            if intencion == 'buscar_producto' and not negocios:
-                # Buscar en todos los negocios
-                context += "\n\n🔍 **BUSCANDO PRODUCTOS...**\n"
-                palabras_busqueda = msg_clean.split()
-                for palabra in palabras_busqueda:
-                    if len(palabra) > 3:  # Solo palabras significativas
-                        from ..models import ProductoNegocio
-                        productos = ProductoNegocio.objects.filter(
-                            nombre__icontains=palabra,
-                            activo=True,
-                            disponible=True
-                        ).select_related('negocio')[:10]
-                        
-                        if productos:
-                            context += f"\nProductos con '{palabra}':\n"
-                            for prod in productos:
-                                context += f"• {prod.nombre} - {prod.get_precio_display()}\n"
-                                context += f"  En: {prod.negocio.nombre}\n"
+                    estado = self.db_service.verificar_negocio_abierto(neg.id)
+                    context += f"- {neg.nombre.upper()} ({neg.categoria}): {estado['mensaje']}. Dir: {neg.direccion}. Tel: {neg.telefono}\n"
         
         except Exception as e:
-            logger.error(f"Error extrayendo información: {e}")
+            logger.error(f"Error extrayendo info de negocios: {e}")
         
         return context
-    
+
     def _procesar_resena(self, message, phone_number):
-        """
-        Procesa una reseña del usuario
-        """
         try:
-            # Extraer nombre del negocio
-            negocios = self.db_service.buscar_negocios(query=message, limit=5)
-            
+            negocios = self.db_service.buscar_negocios(query=message, limit=1)
             if not negocios:
-                return None, "No encontré el negocio que mencionas. ¿Puedes ser más específico?"
+                return None, "No encontré el negocio. ¿Cómo se llama exactamente?"
             
-            # Extraer calificación (buscar números del 1-5)
             calificacion_match = re.search(r'\b([1-5])\b', message)
-            estrellas_match = re.search(r'(\d+)\s*estrella', message.lower())
-            
-            calificacion = None
-            if calificacion_match:
-                calificacion = int(calificacion_match.group(1))
-            elif estrellas_match:
-                calificacion = int(estrellas_match.group(1))
-            
-            if not calificacion:
+            if not calificacion_match:
                 return negocios[0], "encontrado_sin_calificacion"
             
-            # Extraer comentario (el resto del texto)
-            comentario = message
-            
-            # Crear reseña
-            negocio = negocios[0]
+            calificacion = int(calificacion_match.group(1))
             resena = self.db_service.crear_resena(
-                negocio_id=negocio.id,
+                negocio_id=negocios[0].id,
                 telefono_cliente=phone_number,
                 calificacion=calificacion,
-                comentario=comentario
+                comentario=message
             )
-            
-            if resena:
-                return negocio, f"resena_creada_{calificacion}"
-            
-            return negocio, "error_creando_resena"
-            
-        except Exception as e:
-            logger.error(f"Error procesando reseña: {e}")
+            return negocios[0], f"resena_creada_{calificacion}" if resena else "error_creando_resena"
+        except Exception:
             return None, "error"
-    
+
     def get_response(self, message, context=None, phone_number=None):
         if not self.api_key:
             return "Lo siento, manit@, el servicio no está listo."
 
         try:
-            # Detectar intención
             intencion = self._detectar_intencion(message)
+            info_maraton = self._obtener_info_maraton() if intencion == 'maraton_quibdo' else ""
             
-            # Procesar reseñas
-            if intencion == 'resena' and any(word in message.lower() for word in ['calificar', 'reseña', 'opinión']):
+            # Lógica de Reseñas
+            if intencion == 'resena' and any(word in message.lower() for word in ['calificar', 'reseña']):
                 negocio, resultado = self._procesar_resena(message, phone_number)
-                
-                if resultado == "error":
-                    return "Hubo un error procesando tu reseña. Intenta de nuevo."
-                elif resultado == "encontrado_sin_calificacion":
-                    return f"¡Perfecto! Quieres calificar **{negocio.nombre}**. ¿Cuántas estrellas le das? (1-5)"
-                elif "resena_creada" in resultado:
-                    calificacion = resultado.split('_')[-1]
-                    return f"¡Maunifik! Tu reseña de **{calificacion} estrellas** para **{negocio.nombre}** ha sido recibida. ¡Será revisada pronto! ¡Gracias por tu opinión, ve coco!"
-                elif resultado == "error_creando_resena":
-                    return "No pude guardar tu reseña. ¿Puedes intentar de nuevo?"
-                else:
-                    return resultado
-            
-            # Extraer información de la base de datos
+                if resultado == "encontrado_sin_calificacion":
+                    return f"¡Listo, manit@! ¿Cuántas estrellas (1-5) le das a **{negocio.nombre}**?"
+                if "resena_creada" in resultado:
+                    return f"¡Maunifik! Tu reseña para **{negocio.nombre}** ya quedó guardada. ¡Gracias, ve coco!"
+
             db_context = self._extraer_informacion_negocios(message, intencion)
             hora_actual = datetime.now().strftime("%I:%M %p")
             
-            # System Prompt adaptado a la intención
-            system_prompt = """Eres Luisa, la asistente virtual de Parchaoo, super eficiente y chocoana.
+            system_prompt = """Eres Luisa, la asistente virtual de Parchaoo. Eres chocoana, amable, eficiente y usas jerga local.
 
-**INFORMACIÓN IMPORTANTE:**
+**CONTEXTO DE LA MEDIA MARATÓN QUIBDÓ (MMQ):**
+{info_maraton}
+
+**INFORMACIÓN DE NEGOCIOS:**
 {db_context}
 
+**REGLAS DE ORO:**
+1. Si el usuario pregunta por la Media Maratón (MMQ), usa los datos específicos: fecha (14 de junio 2026), rutas (5K, 10K, 21K) y costo ($120.000).
+2. ¡IMPORTANTE!: Si preguntan por inscripciones, diles que son hasta el 31 de diciembre de 2025 para recibir el OBSEQUIO ESPECIAL.
+3. Si preguntan por el sitio web o dónde inscribirse, entrega los links correspondientes.
+4. Usa lenguaje del Chocó: "¡Q hubo!, manit@, ve coco, maunifik, parche, dejá así".
+5. Si no sabes algo de un negocio, sugiere llamar o escribir a su WhatsApp.
+
 **HORA ACTUAL:** {hora_actual}
-
-**CONTEXTO DE CONVERSACIÓN:**
-{context}
-
-**INTENCIÓN DETECTADA:** {intencion}
-
-**REGLAS:**
-1. Si hay información en "INFORMACIÓN IMPORTANTE", úsala SIEMPRE.
-2. Sé directa, amable y usa lenguaje chocoano (¡Q hubo!, manit@, ve coco, dejá así, maunifik).
-3. Para reseñas: Si el usuario quiere calificar, pide el negocio, la calificación (1-5) y opcionalmente un comentario.
-4. Si preguntan por productos/precios específicos que no tienes, sugiere llamar al negocio.
-5. Siempre que sea el primer mensaje, saluda: "Hola, soy Luisa el asistente de Parchaoo..."
-6. Formatea los precios como: $50.000
-
 **MENSAJE DEL USUARIO:** "{message}"
-
-Responde de forma útil y completa usando TODA la información disponible arriba."""
-
+"""
             prompt = system_prompt.format(
-                db_context=db_context if db_context else "No hay información específica disponible.",
+                info_maraton=info_maraton,
+                db_context=db_context if db_context else "No hay info específica de negocios.",
                 hora_actual=hora_actual,
-                context=context if context else "Primera interacción",
-                intencion=intencion,
                 message=message
             )
             
@@ -290,5 +180,5 @@ Responde de forma útil y completa usando TODA la información disponible arriba
             return response.text.strip()
         
         except Exception as e:
-            logger.error(f"Error en Gemini: {e}")
+            logger.error(f"Error en GeminiService: {e}")
             return "¡Ey, manit@! Se me cruzaron los cables. ¿Me repites porfa?"
