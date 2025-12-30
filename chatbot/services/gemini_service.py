@@ -285,21 +285,6 @@ class GeminiService:
 6. Usa formato colombiano para precios: $50.000
 7. Mantén respuestas cortas y directas (máximo 2-3 párrafos)
 8. Si muestras varios negocios, preséntalos en lista clara
-9. si te preguntan por mmq o la madia maraton de quibdo, das la siguiente informacion: (INFORMACIÓN MEDIA MARATÓN QUIBDÓ (MMQ):
-        - Descripción: Evento deportivo urbano para cultivar la paz, bienestar y estilos de vida saludables.
-        - Misión: Fomentar cultura deportiva, salud física y mental, y visibilizar gimnasios/grupos al aire libre.
-        - Visión: Ser impulsores líderes de hábitos saludables con valores de respeto y tolerancia.
-        - Rutas: 5 Kilómetros, 10 Kilómetros y 21 Kilómetros.
-        - Categorías: Infantil (2-15 años), Juvenil (16-19), Abierta (20-49), Élite (Mayores de 18) y Máster (50+ años).
-        - Géneros: Masculino, Femenino y Niños.
-        - Fecha del evento: Domingo, 14 de junio de 2026.
-        - Ubicación: Quibdó, Chocó, Colombia.
-        - Inscripciones: Abiertas del 26/11/2025 al 31/12/2025.
-        - Costo: $ 120.000 para todas las categorías.
-        - Beneficio Preventa: Los inscritos antes del 31 de diciembre de 2025 recibirán un obsequio especial.
-        - El KIT incluye: Camiseta, Medalla, Dorsal, Chip e Hidratación.
-        - Sitio Web Oficial: https://mediamaratondequibdo.com/eventos/
-        - Link de Inscripción: https://respira.run/media-maraton-quibdo)
 
 **TU RESPUESTA (natural y conversacional):**"""
             
