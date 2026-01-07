@@ -218,3 +218,91 @@ class WhatsAppService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error obteniendo URL de media: {str(e)}")
             return None
+    
+    def download_media(self, media_id, save_path):
+        """
+        Descargar archivo multimedia de WhatsApp
+        
+        Args:
+            media_id: ID del media en WhatsApp
+            save_path: Ruta donde guardar el archivo
+        
+        Returns:
+            True si se descargó exitosamente, False en caso contrario
+        """
+        try:
+            # Obtener URL del archivo
+            media_url = self.get_media_url(media_id)
+            
+            if not media_url:
+                logger.error("No se pudo obtener URL del media")
+                return False
+            
+            # Descargar archivo
+            response = requests.get(
+                media_url,
+                headers={'Authorization': f'Bearer {self.access_token}'},
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            # Guardar archivo
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+            
+            logger.info(f"Media descargado exitosamente: {save_path}")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error descargando media: {str(e)}")
+            return False
+    
+    def send_location(self, to_number, latitude, longitude, name="", address=""):
+        """
+        Enviar ubicación
+        
+        Args:
+            to_number: Número de teléfono del destinatario
+            latitude: Latitud
+            longitude: Longitud
+            name: Nombre del lugar (opcional)
+            address: Dirección (opcional)
+        
+        Returns:
+            message_id si tiene éxito, None en caso de error
+        """
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to_number,
+            "type": "location",
+            "location": {
+                "latitude": str(latitude),
+                "longitude": str(longitude),
+                "name": name,
+                "address": address
+            }
+        }
+        
+        try:
+            response = requests.post(
+                url,
+                headers=self._get_headers(),
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            message_id = data.get('messages', [{}])[0].get('id')
+            
+            logger.info(f"Ubicación enviada: {message_id}")
+            return message_id
+        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error enviando ubicación: {str(e)}")
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                logger.error(f"Respuesta de error: {e.response.text}")
+            return None
+
