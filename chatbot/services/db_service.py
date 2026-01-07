@@ -7,6 +7,7 @@ from django.db.models import Q, Count, Sum, Avg
 from datetime import datetime, time
 from ..models import (
     Negocio, HorarioAtencion, ProductoNegocio, CategoriaNegocio, ResenaNegocio,
+    EventoDeportivo,
     Cliente, Producto, Pedido, DetallePedido
 )
 
@@ -378,6 +379,70 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error obteniendo negocios abiertos: {e}")
             return []
+    
+    # ==================== MÉTODOS PARA EVENTOS DEPORTIVOS ====================
+    
+    @staticmethod
+    def obtener_eventos_proximos(dias=7, tipo_evento=None, limit=10):
+        """Obtener eventos deportivos próximos"""
+        try:
+            from datetime import datetime, timedelta
+            
+            ahora = datetime.now()
+            fecha_limite = ahora + timedelta(days=dias)
+            
+            eventos = EventoDeportivo.objects.filter(
+                activo=True,
+                fecha_evento__gte=ahora,
+                fecha_evento__lte=fecha_limite
+            )
+            
+            if tipo_evento:
+                eventos = eventos.filter(tipo_evento__icontains=tipo_evento)
+            
+            return eventos.order_by('fecha_evento')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo eventos próximos: {e}")
+            return []
+    
+    @staticmethod
+    def buscar_eventos(query=None, tipo_evento=None, limit=10):
+        """Buscar eventos deportivos"""
+        try:
+            from datetime import datetime
+            
+            eventos = EventoDeportivo.objects.filter(
+                activo=True,
+                fecha_evento__gte=datetime.now()
+            )
+            
+            if tipo_evento:
+                eventos = eventos.filter(tipo_evento__icontains=tipo_evento)
+            
+            if query:
+                eventos = eventos.filter(
+                    Q(nombre__icontains=query) |
+                    Q(descripcion__icontains=query) |
+                    Q(equipo_local__icontains=query) |
+                    Q(equipo_visitante__icontains=query) |
+                    Q(lugar__icontains=query)
+                )
+            
+            return eventos.order_by('fecha_evento')[:limit]
+        except Exception as e:
+            logger.error(f"Error buscando eventos: {e}")
+            return []
+    
+    @staticmethod
+    def obtener_evento_por_id(evento_id):
+        """Obtener evento específico por ID"""
+        try:
+            return EventoDeportivo.objects.get(id=evento_id, activo=True)
+        except EventoDeportivo.DoesNotExist:
+            return None
+        except Exception as e:
+            logger.error(f"Error obteniendo evento: {e}")
+            return None
     
     # ==================== MÉTODOS ORIGINALES (COMPATIBILIDAD) ====================
     
