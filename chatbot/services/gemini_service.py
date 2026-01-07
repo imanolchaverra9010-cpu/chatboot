@@ -51,9 +51,9 @@ class GeminiService:
             },
         ]
         
-        # Inicializar modelo
+        # Inicializar modelo con capacidades multimodales
         self.model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-2.0-flash-exp",
             generation_config=self.generation_config,
             safety_settings=self.safety_settings
         )
@@ -170,6 +170,10 @@ class GeminiService:
                                     context += f"• Referencia: {neg.referencia_ubicacion}\n"
                                 if neg.telefono:
                                     context += f"• Teléfono: {neg.telefono}\n"
+                                # Agregar coordenadas si están disponibles
+                                if neg.latitud and neg.longitud:
+                                    context += f"• Coordenadas: {neg.latitud}, {neg.longitud}\n"
+                                    context += f"📌 [Puedo enviarte la ubicación exacta si lo deseas]\n"
                             break
             
             # Información de productos/servicios
@@ -353,6 +357,98 @@ class GeminiService:
         except Exception as e:
             logger.error(f"Error con historial de Gemini: {str(e)}", exc_info=True)
             return "Lo siento, hubo un error al procesar tu mensaje."
+    
+    def analyze_image(self, image_path, user_message="", context=""):
+        """
+        Analizar imagen usando Gemini Vision
+        
+        Args:
+            image_path: Ruta local de la imagen
+            user_message: Mensaje del usuario (opcional)
+            context: Contexto adicional
+        
+        Returns:
+            Análisis de la imagen
+        """
+        if not self.api_key:
+            return "Lo siento, el servicio de análisis de imágenes no está configurado."
+        
+        try:
+            from PIL import Image
+            
+            # Cargar imagen
+            img = Image.open(image_path)
+            
+            # Construir prompt
+            prompt = f"""Eres Luisa, asistente virtual de negocios en Quibdó, Chocó.
+
+Analiza esta imagen y ayuda al usuario. Considera:
+
+1. **Si es un menú de restaurante:** Identifica platos, precios, categorías
+2. **Si es un producto:** Describe el producto, características visibles
+3. **Si es una ubicación/negocio:** Describe lo que ves
+4. **Si es otra cosa:** Describe lo relevante
+
+**Mensaje del usuario:** {user_message if user_message else "¿Qué ves en esta imagen?"}
+
+**Contexto:** {context if context else "Sin contexto adicional"}
+
+Responde de forma natural, amigable y útil. Usa emojis cuando sea apropiado 😊"""
+            
+            # Generar respuesta con imagen
+            response = self.model.generate_content([prompt, img])
+            
+            if response.text:
+                logger.info("Imagen analizada exitosamente con Gemini Vision")
+                return response.text.strip()
+            else:
+                return "No pude analizar la imagen en este momento."
+        
+        except Exception as e:
+            logger.error(f"Error analizando imagen: {str(e)}", exc_info=True)
+            return "Lo siento, hubo un error al analizar la imagen. Por favor intenta de nuevo."
+    
+    def transcribe_audio(self, audio_path):
+        """
+        Transcribir audio a texto
+        
+        Args:
+            audio_path: Ruta local del archivo de audio
+        
+        Returns:
+            Texto transcrito
+        """
+        if not self.api_key:
+            return None
+        
+        try:
+            # Gemini 2.0 puede procesar audio directamente
+            import mimetypes
+            
+            # Detectar tipo de archivo
+            mime_type, _ = mimetypes.guess_type(audio_path)
+            
+            # Subir archivo a Gemini
+            audio_file = genai.upload_file(path=audio_path)
+            
+            # Crear prompt para transcripción
+            prompt = """Transcribe el siguiente audio a texto en español.
+            
+Proporciona SOLO la transcripción exacta, sin comentarios adicionales."""
+            
+            # Generar transcripción
+            response = self.model.generate_content([prompt, audio_file])
+            
+            if response.text:
+                logger.info("Audio transcrito exitosamente")
+                return response.text.strip()
+            else:
+                logger.warning("No se pudo transcribir el audio")
+                return None
+        
+        except Exception as e:
+            logger.error(f"Error transcribiendo audio: {str(e)}", exc_info=True)
+            return None
     
     def analyze_sentiment(self, text):
         """Analizar sentimiento de un texto"""
