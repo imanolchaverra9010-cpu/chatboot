@@ -83,6 +83,16 @@ class GeminiService:
             keywords_productos = ['producto', 'vende', 'venden', 'precio', 'cuánto cuesta', 
                                 'cuanto cuesta', 'tiene', 'hay', 'servicio', 'venta']
             
+            # NUEVO: Palabras clave para reseñas
+            keywords_resenas = ['reseña', 'resena', 'calificar', 'calificación', 'calificacion',
+                               'opinión', 'opinion', 'comentario', 'valorar', 'valoración',
+                               'estrellas', 'review']
+            
+            # NUEVO: Palabras clave para eventos deportivos
+            keywords_eventos = ['evento', 'partido', 'juego', 'campeonato', 'torneo',
+                               'futbol', 'fútbol', 'baloncesto', 'basquet', 'voleibol',
+                               'deporte', 'deportivo', 'estadio', 'cancha']
+            
             # Detectar categoría específica
             categorias_map = {
                 'restaurante': ['restaurante', 'comida', 'comer', 'almuerzo', 'desayuno', 'comedor'],
@@ -235,6 +245,36 @@ class GeminiService:
                         for neg in negocios_barrio:
                             context += f"• {neg.nombre} - {neg.direccion}\n"
                         break
+            
+            # NUEVO: Información de eventos deportivos
+            if any(kw in message_lower for kw in keywords_eventos):
+                eventos = self.db_service.obtener_eventos_proximos(dias=14, limit=5)
+                if eventos:
+                    context += "\n\n⚽ **EVENTOS DEPORTIVOS PRÓXIMOS:**\n"
+                    for evento in eventos:
+                        context += f"\n**{evento.nombre}**\n"
+                        if evento.equipo_local and evento.equipo_visitante:
+                            context += f"🏆 {evento.equipo_local} vs {evento.equipo_visitante}\n"
+                        context += f"📅 {evento.fecha_evento.strftime('%A %d de %B, %I:%M %p')}\n"
+                        context += f"📍 {evento.lugar}"
+                        if evento.barrio:
+                            context += f" - {evento.barrio}"
+                        context += "\n"
+                        if evento.entrada_gratis:
+                            context += "💰 Entrada GRATIS\n"
+                        elif evento.precio_entrada:
+                            context += f"💰 Entrada: ${evento.precio_entrada:,.0f}\n"
+                        if evento.descripcion:
+                            desc_corta = evento.descripcion[:100] + "..." if len(evento.descripcion) > 100 else evento.descripcion
+                            context += f"ℹ️ {desc_corta}\n"
+            
+            # NUEVO: Información sobre reseñas
+            if any(kw in message_lower for kw in keywords_resenas):
+                context += "\n\n⭐ **SOBRE RESEÑAS:**\n"
+                context += "Puedes dejar tu reseña de un negocio diciendo:\n"
+                context += "• 'Quiero calificar [nombre del negocio]'\n"
+                context += "• 'Dejar reseña de [nombre del negocio]'\n"
+                context += "Te pediré tu calificación (1-5 estrellas) y tu comentario.\n"
         
         except Exception as e:
             logger.error(f"Error extrayendo información de negocios: {e}")
@@ -312,6 +352,8 @@ class GeminiService:
 6. Precios en formato colombiano: $50.000
 7. Respuestas cortas y directas (2-3 párrafos máximo)
 8. Si no sabes algo, dilo honesto y ofrece ayuda
+9. Si hay eventos deportivos en la info, menciónalos con entusiasmo
+10. Si preguntan por reseñas, explica cómo dejar una calificación
 
 **RESPONDE COMO PARCERA DE BARRIO:**"""
             
