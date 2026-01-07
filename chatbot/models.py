@@ -250,6 +250,67 @@ class ResenaNegocio(models.Model):
         return f"{self.negocio.nombre} - {self.calificacion}⭐ por {self.nombre_cliente or self.telefono_cliente}"
 
 
+class EventoDeportivo(models.Model):
+    """Eventos deportivos en Quibdó"""
+    TIPO_EVENTO_CHOICES = [
+        ('futbol', 'Fútbol'),
+        ('baloncesto', 'Baloncesto'),
+        ('voleibol', 'Voleibol'),
+        ('atletismo', 'Atletismo'),
+        ('ciclismo', 'Ciclismo'),
+        ('otro', 'Otro'),
+    ]
+    
+    nombre = models.CharField(max_length=255, help_text="Nombre del evento")
+    tipo_evento = models.CharField(max_length=50, choices=TIPO_EVENTO_CHOICES, default='futbol')
+    descripcion = models.TextField(blank=True)
+    
+    # Equipos/participantes
+    equipo_local = models.CharField(max_length=100, blank=True)
+    equipo_visitante = models.CharField(max_length=100, blank=True)
+    
+    # Fecha y hora
+    fecha_evento = models.DateTimeField(help_text="Fecha y hora del evento")
+    fecha_fin = models.DateTimeField(null=True, blank=True, help_text="Fecha de finalización (opcional)")
+    
+    # Ubicación
+    lugar = models.CharField(max_length=255, help_text="Ej: Estadio Municipal, Coliseo")
+    direccion = models.TextField(blank=True)
+    barrio = models.CharField(max_length=100, blank=True)
+    
+    # Información adicional
+    precio_entrada = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    entrada_gratis = models.BooleanField(default=False)
+    organizador = models.CharField(max_length=200, blank=True)
+    contacto = models.CharField(max_length=20, blank=True, help_text="Teléfono de contacto")
+    
+    # Metadata
+    imagen = models.URLField(blank=True)
+    activo = models.BooleanField(default=True)
+    destacado = models.BooleanField(default=False)
+    
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'eventos_deportivos'
+        verbose_name = 'Evento Deportivo'
+        verbose_name_plural = 'Eventos Deportivos'
+        ordering = ['fecha_evento']
+    
+    def __str__(self):
+        if self.equipo_local and self.equipo_visitante:
+            return f"{self.equipo_local} vs {self.equipo_visitante} - {self.fecha_evento.strftime('%d/%m/%Y')}"
+        return f"{self.nombre} - {self.fecha_evento.strftime('%d/%m/%Y')}"
+    
+    def esta_proximo(self):
+        """Verifica si el evento es próximo (dentro de los próximos 7 días)"""
+        from datetime import datetime, timedelta
+        ahora = datetime.now()
+        return ahora <= self.fecha_evento <= ahora + timedelta(days=7)
+
+
+
 # --- MODELOS ORIGINALES DE ÉBANO COMPANY (COMPATIBILIDAD) ---
 
 class Cliente(models.Model):
