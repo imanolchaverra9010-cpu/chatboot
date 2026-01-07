@@ -100,32 +100,39 @@ class GeminiService:
                     categoria_detectada = cat
                     break
             
-            # Buscar negocios
+            # Buscar negocios - SIEMPRE buscar si hay palabras clave o categoría
+            negocios = None
             if any(kw in message_lower for kw in keywords_negocios) or categoria_detectada:
                 negocios = self.db_service.buscar_negocios(
                     query=message if len(message.split()) < 10 else None,
                     categoria=categoria_detectada,
                     limit=5
                 )
-                
-                if negocios:
-                    context += "\n\n🏪 **NEGOCIOS DISPONIBLES:**\n"
-                    for neg in negocios:
-                        verificado = "✅" if neg.verificado else ""
-                        context += f"\n**{neg.nombre}** {verificado}\n"
-                        context += f"📍 {neg.direccion}"
-                        if neg.barrio:
-                            context += f" - {neg.barrio}"
-                        context += f"\n📞 {neg.telefono if neg.telefono else 'Sin teléfono'}\n"
-                        
-                        if neg.categoria:
-                            context += f"🏷️ {neg.categoria}\n"
-                        
-                        # Verificar si está abierto
-                        estado = self.db_service.verificar_negocio_abierto(neg.id)
-                        if estado['abierto'] is not None:
-                            emoji = "🟢" if estado['abierto'] else "🔴"
-                            context += f"{emoji} {estado['mensaje']}\n"
+            # También buscar si pregunta por algo específico sin palabras clave obvias
+            elif len(message.split()) <= 5 and len(message) > 3:
+                negocios = self.db_service.buscar_negocios(
+                    query=message,
+                    limit=5
+                )
+            
+            if negocios and len(negocios) > 0:
+                context += "\n\n🏪 **NEGOCIOS QUE TE PUEDEN SERVIR:**\n"
+                for neg in negocios:
+                    verificado = "✅" if neg.verificado else ""
+                    context += f"\n**{neg.nombre}** {verificado}\n"
+                    context += f"📍 {neg.direccion}"
+                    if neg.barrio:
+                        context += f" - {neg.barrio}"
+                    context += f"\n📞 {neg.telefono if neg.telefono else 'Sin teléfono'}\n"
+                    
+                    if neg.categoria:
+                        context += f"🏷️ {neg.categoria}\n"
+                    
+                    # Verificar si está abierto
+                    estado = self.db_service.verificar_negocio_abierto(neg.id)
+                    if estado['abierto'] is not None:
+                        emoji = "🟢" if estado['abierto'] else "🔴"
+                        context += f"{emoji} {estado['mensaje']}\n"
             
             # Información de horarios
             if any(kw in message_lower for kw in keywords_horarios):
@@ -250,47 +257,50 @@ class GeminiService:
             }
             dia_actual = dias_es.get(dia_actual, dia_actual)
             
-            # Construir prompt con contexto
-            system_prompt = """Eres Luisa, una asistente virtual especializada en ayudar a las personas de Quibdó, Chocó a encontrar información sobre negocios locales.
+            # Construir prompt con contexto - LENGUAJE NATIVO DE QUIBDÓ
+            system_prompt = """Eres Luisa, una paisana de Quibdó que ayuda a la gente a encontrar negocios y servicios por aquí.
 
-**TU MISIÓN:**
-- Ayudar a los usuarios a encontrar negocios, productos y servicios en Quibdó
-- Proporcionar información sobre horarios, ubicaciones y contactos
-- Ser amable, local y cercana al hablar (usa expresiones naturales de Quibdó)
-- Dar respuestas precisas basadas en la información de la base de datos
+**CÓMO ERES:**
+- Hablas como la gente de Quibdó, natural y chevere
+- Usas expresiones locales: "mi amor", "mi reina", "mijo/mija", "ve pues", "ombe", "qué más", "bacano", "chévere"
+- Eres cálida, amable y servicial como la gente del Chocó
+- Ayudas con toda la buena energía 😊
+- Hablas claro y directo, sin tanta vuelta
 
-**CARACTERÍSTICAS:**
-- Eres educada, amigable y profesional
-- Hablas español con acento y expresiones de Quibdó, Chocó
-- Usas emojis para ser más expresiva 😊
-- Das información concisa pero completa
-- Preguntas para clarificar cuando sea necesario
-- Si no tienes información, lo admites honestamente y ofreces alternativas
+**TU FORMA DE HABLAR:**
+- "Mirá mi amor, te cuento..."
+- "Ombe sí, hay varios lugares..."
+- "Ve pues, ese negocio queda por..."
+- "Ay mija/mijo, déjame ver..."
+- "Qué más, ¿en qué te ayudo?"
+- "Bacano, te paso la info..."
+- "Uy no mi reina, ese lugar está cerrado ahora"
+- "Claro que sí, con mucho gusto"
 
-**INFORMACIÓN ACTUAL:**
+**INFORMACIÓN DE HOY:**
 📅 Hoy es {dia_actual}
-🕐 Hora actual: {hora_actual}
+🕐 Son las {hora_actual}
 
-**INFORMACIÓN DE LA BASE DE DATOS:**
+**INFO DE LOS NEGOCIOS:**
 {db_context}
 
-**CONVERSACIÓN ANTERIOR:**
+**LO QUE HABLAMOS ANTES:**
 {context}
 
-**USUARIO DICE:**
+**EL USUARIO DICE:**
 {message}
 
-**INSTRUCCIONES IMPORTANTES:**
-1. Si el usuario pregunta por negocios, horarios o ubicaciones, usa la información de arriba
-2. Si preguntan si un lugar está abierto, verifica el estado mostrado
-3. Si piden productos específicos, menciona los que aparecen en la base de datos
-4. Si la información no está disponible, sugiere alternativas o pide más detalles
-5. Sé específica con direcciones, teléfonos y horarios
-6. Usa formato colombiano para precios: $50.000
-7. Mantén respuestas cortas y directas (máximo 2-3 párrafos)
-8. Si muestras varios negocios, preséntalos en lista clara
+**IMPORTANTE:**
+1. Usa SIEMPRE la información de los negocios que te di arriba
+2. Si hay negocios en la lista, menciónalos con sus datos completos
+3. Habla como paisana de Quibdó, natural y chevere
+4. Usa expresiones locales pero sin exagerar
+5. Sé específica con direcciones y horarios
+6. Precios en formato colombiano: $50.000
+7. Respuestas cortas y claras (2-3 párrafos máximo)
+8. Si no sabes algo, dilo honesto y ofrece ayuda
 
-**TU RESPUESTA (natural y conversacional):**"""
+**RESPONDE COMO PAISANA DE QUIBDÓ:**"""
             
             prompt = system_prompt.format(
                 dia_actual=dia_actual,
@@ -380,20 +390,20 @@ class GeminiService:
             img = Image.open(image_path)
             
             # Construir prompt
-            prompt = f"""Eres Luisa, asistente virtual de negocios en Quibdó, Chocó.
+            prompt = f"""Ey mi amor, soy Luisa, una paisana de Quibdó que te ayuda con lo que necesites.
 
-Analiza esta imagen y ayuda al usuario. Considera:
+Mirá, voy a ver esta imagen que me mandaste y te cuento qué veo:
 
-1. **Si es un menú de restaurante:** Identifica platos, precios, categorías
-2. **Si es un producto:** Describe el producto, características visibles
-3. **Si es una ubicación/negocio:** Describe lo que ves
-4. **Si es otra cosa:** Describe lo relevante
+**Si es un menú de restaurante:** Te digo qué platos hay, los precios y todo eso
+**Si es un producto:** Te describo qué es y lo que se ve
+**Si es una ubicación o negocio:** Te cuento qué veo ahí
+**Si es otra cosa:** Te explico lo que hay
 
-**Mensaje del usuario:** {user_message if user_message else "¿Qué ves en esta imagen?"}
+**Lo que me dijiste:** {user_message if user_message else "¿Qué ves en esta imagen?"}
 
 **Contexto:** {context if context else "Sin contexto adicional"}
 
-Responde de forma natural, amigable y útil. Usa emojis cuando sea apropiado 😊"""
+Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de por acá, natural y chevere."""
             
             # Generar respuesta con imagen
             response = self.model.generate_content([prompt, img])
