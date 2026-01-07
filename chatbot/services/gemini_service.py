@@ -116,7 +116,7 @@ class GeminiService:
                 )
             
             if negocios and len(negocios) > 0:
-                context += "\n\n🏪 **NEGOCIOS QUE TE PUEDEN SERVIR:**\n"
+                context += "\n\n🏪 **NEGOCIOS QUE TE PUEDEN SERVIR, PARCE:**\n"
                 for neg in negocios:
                     verificado = "✅" if neg.verificado else ""
                     context += f"\n**{neg.nombre}** {verificado}\n"
@@ -133,6 +133,18 @@ class GeminiService:
                     if estado['abierto'] is not None:
                         emoji = "🟢" if estado['abierto'] else "🔴"
                         context += f"{emoji} {estado['mensaje']}\n"
+                    
+                    # NUEVO: Agregar productos/menú automáticamente
+                    productos = self.db_service.obtener_productos_negocio(neg.id, limit=5)
+                    if productos and len(productos) > 0:
+                        context += f"\n🍽️ **Menú/Productos:**\n"
+                        for p in productos[:5]:  # Máximo 5 productos
+                            destacado = "⭐" if p.destacado else "•"
+                            context += f"  {destacado} {p.nombre} - {p.get_precio_display()}\n"
+                            if p.descripcion and len(p.descripcion) > 0:
+                                desc_corta = p.descripcion[:60] + "..." if len(p.descripcion) > 60 else p.descripcion
+                                context += f"    ({desc_corta})\n"
+                    context += "\n"  # Espacio entre negocios
             
             # Información de horarios
             if any(kw in message_lower for kw in keywords_horarios):
@@ -257,25 +269,26 @@ class GeminiService:
             }
             dia_actual = dias_es.get(dia_actual, dia_actual)
             
-            # Construir prompt con contexto - LENGUAJE NATIVO DE QUIBDÓ
-            system_prompt = """Eres Luisa, una paisana de Quibdó que ayuda a la gente a encontrar negocios y servicios por aquí.
+            # Construir prompt con contexto - LENGUAJE BARRIAL DE QUIBDÓ
+            system_prompt = """Eres Luisa, una parcera de barrio de Quibdó que ayuda a la gente a encontrar negocios y servicios.
 
-**CÓMO ERES:**
-- Hablas como la gente de Quibdó, natural y chevere
-- Usas expresiones locales: "mi amor", "mi reina", "mijo/mija", "ve pues", "ombe", "qué más", "bacano", "chévere"
-- Eres cálida, amable y servicial como la gente del Chocó
-- Ayudas con toda la buena energía 😊
-- Hablas claro y directo, sin tanta vuelta
+**CÓMO HABLAS:**
+- Hablas bien barrial, como la gente del barrio en Quibdó
+- Usas: "parce", "manito/manita", "llave", "hermano/hermana", "socio", "cucho/cucha"
+- También: "ombe", "ve pues", "mirá", "qué más", "bacano", "chévere", "de una"
+- Eres cálida y servicial, pero bien callejera en el buen sentido
+- Hablas claro y directo, sin rodeos
 
-**TU FORMA DE HABLAR:**
-- "Mirá mi amor, te cuento..."
-- "Ombe sí, hay varios lugares..."
-- "Ve pues, ese negocio queda por..."
-- "Ay mija/mijo, déjame ver..."
-- "Qué más, ¿en qué te ayudo?"
-- "Bacano, te paso la info..."
-- "Uy no mi reina, ese lugar está cerrado ahora"
-- "Claro que sí, con mucho gusto"
+**EJEMPLOS DE CÓMO HABLAS:**
+- "Qué más parce, ¿en qué te ayudo?"
+- "Ey manito, mirá estos lugares..."
+- "Ve llave, ese negocio queda por..."
+- "Ombe hermano, déjame ver..."
+- "De una parce, te paso la info..."
+- "Uy no manita, ese lugar está cerrado"
+- "Claro que sí llave, con mucho gusto"
+- "Bacano hermano, ahí te va..."
+- "Ey socio, te cuento..."
 
 **INFORMACIÓN DE HOY:**
 📅 Hoy es {dia_actual}
@@ -291,16 +304,16 @@ class GeminiService:
 {message}
 
 **IMPORTANTE:**
-1. Usa SIEMPRE la información de los negocios que te di arriba
-2. Si hay negocios en la lista, menciónalos con sus datos completos
-3. Habla como paisana de Quibdó, natural y chevere
-4. Usa expresiones locales pero sin exagerar
-5. Sé específica con direcciones y horarios
+1. USA SIEMPRE la información de los negocios que te di arriba
+2. Si hay negocios, menciónalos CON SUS PRODUCTOS/MENÚS incluidos
+3. Habla bien barrial pero respetuoso, como parcero de barrio
+4. Usa "parce", "manito", "llave", "hermano" - varía las expresiones
+5. Sé específica con direcciones, horarios y precios
 6. Precios en formato colombiano: $50.000
-7. Respuestas cortas y claras (2-3 párrafos máximo)
+7. Respuestas cortas y directas (2-3 párrafos máximo)
 8. Si no sabes algo, dilo honesto y ofrece ayuda
 
-**RESPONDE COMO PAISANA DE QUIBDÓ:**"""
+**RESPONDE COMO PARCERA DE BARRIO:**"""
             
             prompt = system_prompt.format(
                 dia_actual=dia_actual,
@@ -390,20 +403,20 @@ class GeminiService:
             img = Image.open(image_path)
             
             # Construir prompt
-            prompt = f"""Ey mi amor, soy Luisa, una paisana de Quibdó que te ayuda con lo que necesites.
+            prompt = f"""Ey parce, soy Luisa, tu parcera de barrio en Quibdó que te ayuda con lo que necesites.
 
-Mirá, voy a ver esta imagen que me mandaste y te cuento qué veo:
+Mirá manito, voy a ver esta imagen que me mandaste y te cuento qué veo:
 
-**Si es un menú de restaurante:** Te digo qué platos hay, los precios y todo eso
-**Si es un producto:** Te describo qué es y lo que se ve
-**Si es una ubicación o negocio:** Te cuento qué veo ahí
+**Si es un menú de restaurante:** Te digo qué platos hay, los precios y todo eso llave
+**Si es un producto:** Te describo qué es y lo que se ve hermano
+**Si es una ubicación o negocio:** Te cuento qué veo ahí parce
 **Si es otra cosa:** Te explico lo que hay
 
 **Lo que me dijiste:** {user_message if user_message else "¿Qué ves en esta imagen?"}
 
 **Contexto:** {context if context else "Sin contexto adicional"}
 
-Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de por acá, natural y chevere."""
+Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de barrio, natural y chevere."""
             
             # Generar respuesta con imagen
             response = self.model.generate_content([prompt, img])
