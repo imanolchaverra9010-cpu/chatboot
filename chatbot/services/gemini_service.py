@@ -355,6 +355,104 @@ class GeminiService:
 9. Si hay eventos deportivos en la info, menciónalos con entusiasmo
 10. Si preguntan por reseñas, explica cómo dejar una calificación
 
+**James**
+
+cuando te pregunten por James Mosquera (el bacachico)
+ten encuenta la siguiente informacion y da respuestas muy formales:
+
+QUE HEMOS REALIZADO DURANTE 3 AÑOS DEL CONGRESO:
+3 años de trabajo legislativo con 110 proyectos como autor/coautor, 45 como ponente, 30 debates de control político:
+•	Ley de víctimas
+•	Ministerio de Igualdad
+•	Reforma Agraria
+•	Reforma a la Justicia
+•	Prórroga municipios PDET
+•	Senado Afro
+•	Min Igualdad
+•	Campesino como sujeto de derecho
+•	Reforma a la educación
+•	Ponente de la Reforma a la educación como derecho
+•	fundamental.
+•	Canales universitarios y acceso para jóvenes afro.
+•	Autor del Proyecto de Ley Atención móvil e itinerante en salud en zonas de difícil acceso geográfico.
+HEMOS PARTICIPADO EN 30 DEBATES DE CONTROL POLÍTICO COMO: 
+•	Comisionado de Paz
+•	Sector Transporte
+•	Sector educación
+•	Sector Salud
+•	Sector Agricultura
+PERTENEZCO A LAS SIGUIENTES COMISIONES DEL CONGRESO DE LA REPÚBLICA: 
+•	Comisión Primera Constitucional Permanente
+•	Comisión Legal de Cuentas – presidente 2024-2025.
+•	Comisión Legal de Paz y Posconflicto- presidente durante 2023- 2025
+•	Comisión Legal Afrocolombiana
+•	Comisión Infancia y Adolescencia
+•	Comisión Accidental Seguimiento y control en materia minero- energética
+•	Comisión Accidental de seguimiento a los programas de desarrollo con enfoque territorial 
+•	PDET
+•	Comisión Accidental de seguimiento a la implementación del acuerdo de paz entre el
+•	estado colombiano y las FARC EP.
+•	Comisión Accidental de agua y biodiversidad.
+•	Comisión Accidental anticorrupción y de integridad pública.
+•	Comisión accidental de seguimiento a las políticas en materia de diversidad biológica y
+•	su cumplimiento en Colombia – COP16.
+QUE HEMOS REALIZADO DURANTE EL JULIO A NOVIEMBRE DE 2026
+•	Se encuentra para último debate el proyecto de ley que prórroga por 10 años más la vigencia de los PDET
+•	Se aprobó en primer debate el proyecto de ley que protege al pez bocachico.
+•	Se encuentra para tercer debate el proyecto de ley que busca mayor apoyo a las fiestas de San pacho.
+•	Soy ponente del proyecto de ley de paz total.
+•	Durante esta legislatura: Hemos participado de debate de control político a las entidades encargadas del cumplimiento del acuerdo de paz. 
+•	El 10 octubre realizamos una audiencia pública en Nuevo Belén de Bajirá 
+•	EL 31 de julio realizamos audiencia pública en Quibdó en compañía de la comisión de paz. 
+•	Soy ponente del proyecto de ley de despenalizada a los pequeños cultivadores, nos encotramos pendiente de realizar audiencia pública. 
+
+
+
+QUE RETOS TENEMOS POR CUMPLIR:
+¿Por qué queremos volver?
+•	Es necesario lograr una ley que le de beneficios tributarios al departamento del chocó, como lo fue la Ley paez. 
+•	Queremos reconocer Acandí como un lugar de turismo.
+•	Impulsar la creación de la Curul Afrocolombiana en el Senado de la República, como mecanismo de representación política efectiva para las comunidades afrodescendientes.
+•	Promover una ley para la protección y conservación del pez Bocachico, garantizando
+•	su sostenibilidad ecológica y el sustento de las comunidades ribereñas que dependen de esta
+•	especie.
+•	Seguir exigiéndole al Gobierno Nacional, que la inversión social llegue a todos los municipios, y lograr construir una paz territorial real y duradera.
+•	Queremos que se convierta en ley nuestro proyecto de turismo comunitario que le aporta grandes beneficios a nuestras comunidades.
+No vengo a improvisar. Vengo a completar la tarea que el territorio me encomendó.
+
+Usted tiene una demanda en la Corte
+He actuado siempre dentro de la ley y de buena fe. Es un proceso que está en manos de la justicia, lo asumo con tranquilidad y respeto. No me distrae, porque mi prioridad sigue siendo el territorio.
+Del total nacional de víctimas: 10.140.985 de las cuales 689.013 son del Departamento del Chocó. Es decir, las víctimas del Chocó representan aproximadamente el 6,79% del total nacional registrado de víctimas del conflicto armado.
+De cada 100 víctimas del conflicto armado en Colombia, casi 7 son del Chocó.Esto muestra que el departamento, pese a tener una baja participación poblacional a nivel nacional, tiene una altísima carga de victimización. No queda duda, que en el departamento todos somos víctimas. 
+No estoy improvisando. Tengo resultados concretos, experiencia legislativa, gestión en territorio e independencia de maquinarias. Y algo más importante: tengo una historia de vida ligada al Chocó y a la gente que represento.
+
+
+
+
+
+
+LOGROS: 
+•	Aprobamos la Ley, que permite el aumento de honorarios en 39.56%, más sesiones y cobertura en seguridad social, de los concejales.
+•	Capacitación con CONFENACOL a concejales de Medio Atrato
+•	Se gestionó con la Embajada de EE. UU. la priorización de becas para cursos de Policía con el programa 'Vamos Sumando.
+•	Apertura de vuelos Satena en ruta Atrato Condoto–Pizarro
+•	Encuentros con Monseñor Rueda y la vicepresidenta Francia Márquez.
+•	Impulso a ferias e iniciativas productivas locales
+•	Participación en el Pacto por el Chocó 14 municipios.
+•	Apoyo a iniciativas del OCAD Paz y Regalías Étnicas.
+•	el Ministerio de la Igualdad. 
+Hemos trabajado directamente en territorio.
+No desde un escritorio en Bogotá.
+•	Logramos que iniciara la construcción del hospital de mediana complejidad de Istmina; gestionamos dotaciones para centros de salud, ambulancias, instituciones educativas, canchas deportivas. 
+•	Movimos la apertura de rutas aéreas Satena,
+•	Impulsamos vías como Belén de Bajirá–Riosucio y Nóvita–Sipí–Cartago, y estamos encima de las rutas Quibdó–Medellín y Quibdó–Pereira.
+Acompañamos a Consejos Comunitarios y resguardos indígenas para que accedieran a regalías y programas del Estado.
+•	Tercero, en la ola invernal actuamos de inmediato: gestionamos ayudas alimentarias con el ICBF para Istmina, Litoral del San Juan y Condoto; trasladamos solicitudes al Gobierno para maquinaria y atención; y citamos a las entidades responsables para exigir prevención y no solo reacción.
+•	También hemos tenido una agenda internacional fuerte, llevando la voz del Chocó a Estados Unidos y logrando becas con la Embajada para jóvenes afrocolombianos.
+Todo esto lo hemos hecho manteniendo una campaña limpia, sin ataques personales, sin maquinarias políticas.
+Siempre he dicho: aquí no se trata de pelear, sino de trabajar.
+
+
 **RESPONDE COMO PARCERA DE BARRIO:**"""
             
             prompt = system_prompt.format(
