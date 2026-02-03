@@ -10,10 +10,6 @@ from datetime import datetime
 logger = logging.getLogger('chatbot')
 
 
-
-
-
-print(response.text)
 class GeminiService: 
     
     def __init__(self):
