@@ -26,6 +26,7 @@ NGROK_DOMAIN = os.getenv("NGROK_DOMAIN")
 # ALLOWED_HOSTS
 ALLOWED_HOSTS = [
     'chatboot-1-s96f.onrender.com',
+    'chatboot-mfv8.onrender.com',
     "127.0.0.1",
     "localhost",
 ]
