@@ -53,7 +53,7 @@ class GeminiService:
         
         # Inicializar modelo con capacidades multimodales
         self.model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash-latest",
+            model_name="gemini-1.5-pro",
             generation_config=self.generation_config,
             safety_settings=self.safety_settings
         )
