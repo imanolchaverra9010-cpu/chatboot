@@ -513,12 +513,13 @@ def process_message(message_data, value):
 def inbox(request):
     """Vista estilo WhatsApp: conversaciones y mensajes"""
     from django.db.models import Prefetch
+    # No usar slice en Prefetch: Django filtra internamente y falla con "Cannot filter once slice taken"
     conversations = Conversation.objects.filter(is_active=True).prefetch_related(
-        Prefetch('messages', queryset=Message.objects.order_by('-created_at')[:1])
+        Prefetch('messages', queryset=Message.objects.order_by('-created_at'))
     ).order_by('-updated_at')[:50]
     
     for conv in conversations:
-        last = conv.messages.first()
+        last = conv.messages.first()  # primer mensaje del prefetch ordenado (el más reciente)
         conv.last_message = (last.content[:80] + '...') if last and len(last.content) > 80 else (last.content if last else None)
     
     return render(request, 'chatbot/inbox.html', {'conversations': conversations})
