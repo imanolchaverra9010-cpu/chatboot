@@ -2,12 +2,24 @@
 Servicio para interactuar con Google Gemini AI - ESPECIALIZADO EN NEGOCIOS
 """
 import logging
+import time
 import google.generativeai as genai
 from django.conf import settings
 from .db_service import DatabaseService
 from datetime import datetime
 
+try:
+    from google.api_core.exceptions import ResourceExhausted
+except ImportError:
+    ResourceExhausted = Exception  # fallback si no está disponible
+
 logger = logging.getLogger('chatbot')
+
+# Mensaje amigable cuando se excede la cuota de Gemini (free tier ~20 req/día)
+MSG_CUOTA_EXCEDIDA = (
+    "Ey manito, por ahora alcanzamos el límite de consultas del día. "
+    "Escribe *HUMANO* para hablar con un asesor, o intenta mañana."
+)
 
 
 class GeminiService: 
@@ -51,9 +63,11 @@ class GeminiService:
             },
         ]
         
-        # Inicializar modelo con capacidades multimodales
+        # Modelo configurable (free tier: gemini-2.5-flash ~20 req/día)
+        self.model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+        self.fallback_model = getattr(settings, 'GEMINI_FALLBACK_MODEL', 'gemini-1.5-flash')
         self.model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name=self.model_name,
             generation_config=self.generation_config,
             safety_settings=self.safety_settings
         )
@@ -406,6 +420,27 @@ class GeminiService:
         
         return context
     
+    def _generate_with_retry(self, prompt, max_retries=1, retry_delay=50):
+        """
+        Llama a generate_content con reintento ante error 429 (cuota/rate limit).
+        Retorna None si se excedió la cuota tras los reintentos.
+        """
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                return self.model.generate_content(prompt)
+            except Exception as e:
+                is_429 = isinstance(e, ResourceExhausted) or getattr(e, 'code', None) == 429
+                if not is_429:
+                    raise
+                if attempt < max_retries:
+                    logger.warning(f"Gemini 429, reintentando en {retry_delay}s (intento {attempt + 1}/{max_retries + 1})")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Gemini: cuota excedida tras {max_retries + 1} intentos: {e}")
+                    return None
+        return None
+    
     def get_response(self, message, context=None, phone_number=None):
         """
         Generar respuesta usando Gemini con contexto de negocios
@@ -594,16 +629,21 @@ Siempre he dicho: aquí no se trata de pelear, sino de trabajar.
                 message=message
             )
             
-            # Generar respuesta
-            response = self.model.generate_content(prompt)
+            # Generar respuesta con retry en caso de 429 (cuota/rate limit)
+            response = self._generate_with_retry(prompt)
             
-            if response.text:
+            if response and response.text:
                 logger.info(f"Respuesta de Gemini generada con contexto de negocios")
                 return response.text.strip()
+            elif response is None:
+                return MSG_CUOTA_EXCEDIDA
             else:
                 logger.warning("Gemini no generó respuesta de texto")
                 return "Lo siento, no pude generar una respuesta en este momento."
         
+        except ResourceExhausted:
+            logger.warning("Gemini: cuota excedida (ResourceExhausted)")
+            return MSG_CUOTA_EXCEDIDA
         except Exception as e:
             logger.error(f"Error generando respuesta con Gemini: {str(e)}", exc_info=True)
             return "Lo siento, hubo un error al procesar tu mensaje. Por favor intenta de nuevo."
@@ -641,7 +681,11 @@ Siempre he dicho: aquí no se trata de pelear, sino de trabajar.
                     chat.send_message(msg['content'])
             
             # Enviar último mensaje
-            response = chat.send_message(last_message)
+            try:
+                response = chat.send_message(last_message)
+            except ResourceExhausted:
+                logger.warning("Gemini: cuota excedida en get_response_with_history")
+                return MSG_CUOTA_EXCEDIDA
             
             if response.text:
                 return response.text.strip()
@@ -690,7 +734,11 @@ Mirá manito, voy a ver esta imagen que me mandaste y te cuento qué veo:
 Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de barrio, natural y chevere."""
             
             # Generar respuesta con imagen
-            response = self.model.generate_content([prompt, img])
+            try:
+                response = self.model.generate_content([prompt, img])
+            except ResourceExhausted:
+                logger.warning("Gemini: cuota excedida en analyze_image")
+                return MSG_CUOTA_EXCEDIDA
             
             if response.text:
                 logger.info("Imagen analizada exitosamente con Gemini Vision")
@@ -735,7 +783,11 @@ Mirá manito, voy a ver este video que me mandaste y te cuento qué pasa:
 
 Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafos."""
             
-            response = self.model.generate_content([prompt, video_file])
+            try:
+                response = self.model.generate_content([prompt, video_file])
+            except ResourceExhausted:
+                logger.warning("Gemini: cuota excedida en process_video")
+                return MSG_CUOTA_EXCEDIDA
             
             if response.text:
                 logger.info("Video procesado exitosamente con Gemini")
@@ -775,7 +827,11 @@ Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafo
 Proporciona SOLO la transcripción exacta, sin comentarios adicionales."""
             
             # Generar transcripción
-            response = self.model.generate_content([prompt, audio_file])
+            try:
+                response = self.model.generate_content([prompt, audio_file])
+            except ResourceExhausted:
+                logger.warning("Gemini: cuota excedida en transcribe_audio")
+                return None
             
             if response.text:
                 logger.info("Audio transcrito exitosamente")
@@ -801,7 +857,10 @@ Texto: {text}
 
 Sentimiento:"""
             
-            response = self.model.generate_content(prompt)
+            try:
+                response = self.model.generate_content(prompt)
+            except ResourceExhausted:
+                return {'sentiment': 'neutral', 'score': 0.5}
             sentiment_text = response.text.strip().lower()
             
             sentiment_map = {
