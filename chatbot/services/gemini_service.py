@@ -71,10 +71,13 @@ class GeminiService:
         message_lower = message.lower()
         
         try:
-            # Palabras clave para búsqueda de negocios
-            keywords_negocios = ['negocio', 'tienda', 'local', 'restaurante', 'farmacia', 
-                                'panadería', 'supermercado', 'ferretería', 'dónde', 'donde',
-                                'panaderia', 'ferreteria']
+            # Palabras clave para búsqueda de negocios (incluye lista, restaurantes, farmacias, etc.)
+            keywords_negocios = ['negocio', 'negocios', 'tienda', 'tiendas', 'local', 'locales',
+                                'restaurante', 'restaurantes', 'farmacia', 'farmacias',
+                                'panadería', 'panaderias', 'panaderías', 'supermercado', 'supermercados',
+                                'ferretería', 'ferreterias', 'ferreterías', 'drogueria', 'droguería',
+                                'dónde', 'donde', 'lista', 'listado', 'cuáles', 'cuales',
+                                'qué hay', 'que hay', 'dame', 'busco', 'necesito', 'conoces']
             
             keywords_horarios = ['horario', 'abierto', 'cerrado', 'abre', 'cierra', 'hora', 
                                'atiende', 'atención', 'atencion', 'funciona']
@@ -115,17 +118,32 @@ class GeminiService:
             # Buscar negocios - SIEMPRE buscar si hay palabras clave o categoría
             negocios = None
             if any(kw in message_lower for kw in keywords_negocios) or categoria_detectada:
+                # Si pide lista por categoría (restaurantes, farmacias), buscar SOLO por categoría
+                # No pasar el mensaje completo como query o filtrará mal
+                query_busqueda = None
+                if categoria_detectada:
+                    query_busqueda = None  # Solo categoría
+                else:
+                    # Extraer término de búsqueda si es corto (ej: "panaderia centro")
+                    palabras = [p for p in message_lower.split() if len(p) > 3 and p not in keywords_negocios]
+                    if len(palabras) <= 3 and palabras:
+                        query_busqueda = palabras[0] if len(palabras[0]) > 4 else None
                 negocios = self.db_service.buscar_negocios(
-                    query=message if len(message.split()) < 10 else None,
+                    query=query_busqueda,
                     categoria=categoria_detectada,
-                    limit=5
+                    limit=10
                 )
             # También buscar si pregunta por algo específico sin palabras clave obvias
             elif len(message.split()) <= 5 and len(message) > 3:
                 negocios = self.db_service.buscar_negocios(
                     query=message,
-                    limit=5
+                    limit=10
                 )
+            
+            # Mensaje explícito si pidieron lista pero no hay resultados
+            pidio_lista = any(kw in message_lower for kw in ['lista', 'listado', 'restaurantes', 'farmacias', 'negocios', 'cuáles', 'cuales', 'qué hay', 'que hay'])
+            if pidio_lista and (not negocios or len(negocios) == 0):
+                context += "\n\n🏪 **NEGOCIOS:** No hay negocios registrados en esa categoría. El usuario pidió lista de restaurantes/farmacias/etc. Responde que por ahora no tenemos esa información cargada en el sistema.\n"
             
             if negocios and len(negocios) > 0:
                 context += "\n\n🏪 **NEGOCIOS QUE TE PUEDEN SERVIR, PARCE:**\n"
@@ -374,7 +392,10 @@ class GeminiService:
                             break
             
             # === MÓDULO ALERTAS (cambios de última hora) - SIEMPRE incluir ===
-            alertas = self.db_service.obtener_alertas_activas(limit=5)
+            try:
+                alertas = self.db_service.obtener_alertas_activas(limit=5)
+            except Exception:
+                alertas = []
             if alertas:
                 context += "\n\n⚠️ **ALERTAS Y CAMBIOS DE ÚLTIMA HORA:**\n"
                 for a in alertas:
@@ -454,7 +475,8 @@ class GeminiService:
 
 **IMPORTANTE:**
 1. USA SIEMPRE la información que te di arriba (negocios, eventos, boletería, trámites, turnos, alertas)
-2. Si hay negocios, menciónalos CON SUS PRODUCTOS/MENÚS incluidos
+2. Si hay negocios en la INFO DE NEGOCIOS, SIEMPRE enumera la lista completa. NUNCA digas que no hay cuando la lista está arriba
+3. Si hay negocios, menciónalos CON SUS PRODUCTOS/MENÚS incluidos
 3. Habla bien barrial pero respetuoso, como parcero de barrio
 4. Usa "parce", "manito", "llave", "hermano" - varía las expresiones
 5. Sé específica con direcciones, horarios, precios y LINKS cuando existan
@@ -679,6 +701,50 @@ Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de barrio, n
         except Exception as e:
             logger.error(f"Error analizando imagen: {str(e)}", exc_info=True)
             return "Lo siento, hubo un error al analizar la imagen. Por favor intenta de nuevo."
+    
+    def process_video(self, video_path, user_message="", context=""):
+        """
+        Procesar video usando Gemini (descripción, transcripción si tiene audio)
+        
+        Args:
+            video_path: Ruta local del archivo de video
+            user_message: Mensaje/pregunta del usuario (opcional)
+            context: Contexto adicional
+        
+        Returns:
+            Respuesta generada sobre el video
+        """
+        if not self.api_key:
+            return "Lo siento, el servicio de análisis de videos no está configurado."
+        
+        try:
+            video_file = genai.upload_file(path=video_path)
+            
+            prompt = f"""Ey parce, soy Luisa, tu parcera de barrio en Quibdó.
+
+Mirá manito, voy a ver este video que me mandaste y te cuento qué pasa:
+
+**Si es un video de un lugar/negocio:** Describo qué veo, dónde parece estar, qué hay
+**Si tiene texto o menú:** Leo y resumo lo que dice
+**Si es un evento o algo en vivo:** Cuento qué está pasando
+**Si es otra cosa:** Te explico lo que veo y escucho
+
+**Lo que me dijiste:** {user_message if user_message else "¿Qué ves en este video?"}
+
+**Contexto:** {context if context else "Sin contexto"}
+
+Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafos."""
+            
+            response = self.model.generate_content([prompt, video_file])
+            
+            if response.text:
+                logger.info("Video procesado exitosamente con Gemini")
+                return response.text.strip()
+            return "No pude procesar el video en este momento."
+        
+        except Exception as e:
+            logger.error(f"Error procesando video: {str(e)}", exc_info=True)
+            return "Lo siento, hubo un error al analizar el video. Verifica que sea formato MP4 o similar."
     
     def transcribe_audio(self, audio_path):
         """

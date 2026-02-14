@@ -1,13 +1,19 @@
 """
 Views para manejar webhook de WhatsApp - VERSION CON DEBUG MEJORADO
 Incluye módulos: Informativo, Logístico, Analítico, Escalamiento
+Procesa: texto, imágenes, audios, videos
 """
 import logging
 import json
 import re
+import os
+import tempfile
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
+from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from .models import Conversation, Message
 from .services.whatsapp_service import WhatsAppService
@@ -24,8 +30,9 @@ def index(request):
     """
     return HttpResponse(
         "<h1>WhatsApp Chatbot Online</h1>"
-        "<p>Webhook: <a href='/chatbot/webhook/'>/chatbot/webhook/</a></p>"
-        "<p>Status: <a href='/chatbot/status/'>/chatbot/status/</a></p>",
+        "<p><a href='/chatbot/inbox/'>📱 Inbox (mensajes)</a></p>"
+        "<p><a href='/chatbot/webhook/'>Webhook</a> | "
+        "<a href='/chatbot/status/'>Status</a></p>",
         status=200
     )
 
@@ -196,6 +203,88 @@ def handle_webhook(request):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
+def _process_multimedia(message_type, message_data, conversation, from_number):
+    """
+    Descarga y procesa imagen, audio o video con Gemini.
+    Retorna texto de respuesta.
+    """
+    media_id = None
+    suffix = None
+    caption = ""
+    
+    if message_type == 'image':
+        image_data = message_data.get('image', {})
+        media_id = image_data.get('id')
+        caption = image_data.get('caption', '')
+        suffix = '.jpg'
+    elif message_type == 'sticker':
+        sticker_data = message_data.get('sticker', {})
+        media_id = sticker_data.get('id')
+        suffix = '.webp'
+    elif message_type == 'audio':
+        audio_data = message_data.get('audio', {})
+        media_id = audio_data.get('id')
+        suffix = '.ogg'
+    elif message_type == 'video':
+        video_data = message_data.get('video', {})
+        media_id = video_data.get('id')
+        caption = video_data.get('caption', '')
+        suffix = '.mp4'
+    
+    if not media_id:
+        return "No pude obtener el archivo multimedia. Por favor intenta de nuevo."
+    
+    temp_path = None
+    try:
+        whatsapp_service = WhatsAppService()
+        fd, temp_path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        
+        if not whatsapp_service.download_media(media_id, temp_path):
+            return "No pude descargar el archivo. Verifica tu conexión e intenta de nuevo."
+        
+        gemini_service = GeminiService()
+        recent_messages = conversation.get_recent_messages(limit=3)
+        context = "\n".join([
+            f"{'Usuario' if m.direction == 'incoming' else 'Bot'}: {m.content}"
+            for m in reversed(list(recent_messages))
+        ])
+        
+        if message_type in ('image', 'sticker'):
+            logger.info("         🖼️ Analizando imagen/sticker con Gemini Vision...")
+            response_text = gemini_service.analyze_image(temp_path, caption, context)
+        elif message_type == 'audio':
+            logger.info("         🎤 Transcribiendo audio con Gemini...")
+            transcript = gemini_service.transcribe_audio(temp_path)
+            if transcript:
+                logger.info("         🤖 Generando respuesta al audio...")
+                full_context = "\n".join([
+                    f"{'Usuario' if m.direction == 'incoming' else 'Bot'}: {m.content}"
+                    for m in reversed(list(conversation.get_recent_messages(limit=5)))
+                ])
+                response_text = gemini_service.get_response(transcript, full_context, phone_number=from_number)
+            else:
+                response_text = "No pude transcribir el audio. Asegúrate de que sea claro y en español."
+        elif message_type == 'video':
+            logger.info("         🎬 Procesando video con Gemini...")
+            response_text = gemini_service.process_video(temp_path, caption, context)
+        else:
+            response_text = "He recibido tu mensaje. Por ahora proceso imágenes, audios y videos."
+        
+        return response_text
+    
+    except Exception as e:
+        logger.error(f"Error procesando multimedia: {str(e)}", exc_info=True)
+        return "Lo siento, hubo un error al procesar tu imagen/audio/video. Intenta de nuevo."
+    
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
 def process_message(message_data, value):
     """
     Procesa un mensaje individual
@@ -204,6 +293,11 @@ def process_message(message_data, value):
         # Extraer datos
         message_id = message_data.get('id')
         from_number = message_data.get('from')
+        
+        # Evitar duplicados: WhatsApp reintenta el webhook si no responde rápido
+        if Message.objects.filter(message_id=message_id).exists():
+            logger.info(f"         ⏭️ Mensaje ya procesado (duplicado): {message_id}")
+            return
         timestamp = message_data.get('timestamp')
         message_type = message_data.get('type')
         
@@ -385,14 +479,106 @@ def process_message(message_data, value):
             else:
                 logger.error("         ❌ Error enviando respuesta")
         else:
-            # Mensaje multimedia
-            logger.info("         🖼️ Enviando respuesta para multimedia...")
+            # Procesar imagen, audio, video o sticker con Gemini
+            if message_type in ('image', 'audio', 'video', 'sticker'):
+                response_text = _process_multimedia(
+                    message_type=message_type,
+                    message_data=message_data,
+                    conversation=conversation,
+                    from_number=from_number,
+                )
+            elif message_type == 'location':
+                # Procesar ubicación como texto
+                content = incoming_message.content
+                gemini_service = GeminiService()
+                context = "\n".join([
+                    f"{'Usuario' if m.direction == 'incoming' else 'Bot'}: {m.content}"
+                    for m in reversed(list(conversation.get_recent_messages(limit=5)))
+                ])
+                response_text = gemini_service.get_response(
+                    f"El usuario envió su ubicación: {content}. Ayúdame con información de lugares cercanos o cómo llegar.",
+                    context, phone_number=from_number
+                )
+            else:
+                response_text = "He recibido tu archivo. Por ahora proceso imágenes, audios, videos y stickers."
+            
             whatsapp_service = WhatsAppService()
-            response_text = "He recibido tu mensaje multimedia. Por ahora solo respondo textos."
             whatsapp_service.send_text_message(from_number, response_text)
     
     except Exception as e:
         logger.error(f"❌ Error procesando mensaje: {str(e)}", exc_info=True)
+
+
+@login_required
+def inbox(request):
+    """Vista estilo WhatsApp: conversaciones y mensajes"""
+    from django.db.models import Prefetch
+    conversations = Conversation.objects.filter(is_active=True).prefetch_related(
+        Prefetch('messages', queryset=Message.objects.order_by('-created_at')[:1])
+    ).order_by('-updated_at')[:50]
+    
+    for conv in conversations:
+        last = conv.messages.first()
+        conv.last_message = (last.content[:80] + '...') if last and len(last.content) > 80 else (last.content if last else None)
+    
+    return render(request, 'chatbot/inbox.html', {'conversations': conversations})
+
+
+@login_required
+def conversation_messages(request, conversation_id):
+    """API: mensajes de una conversación en JSON"""
+    try:
+        conv = Conversation.objects.get(id=conversation_id)
+        messages = conv.messages.order_by('created_at')[:200]
+        data = {
+            'messages': [
+                {
+                    'id': m.id,
+                    'content': m.content,
+                    'direction': m.direction,
+                    'message_type': m.message_type,
+                    'time': m.created_at.strftime('%H:%M'),
+                    'date': m.created_at.strftime('%d/%m/%Y'),
+                }
+                for m in messages
+            ]
+        }
+        return JsonResponse(data)
+    except Conversation.DoesNotExist:
+        return JsonResponse({'error': 'Conversación no encontrada'}, status=404)
+
+
+@login_required
+@require_POST
+def send_alert(request):
+    """Enviar alerta a usuario(s) por WhatsApp"""
+    conversation_id = request.POST.get('conversation_id')
+    scope = request.POST.get('scope', 'single')
+    message = request.POST.get('message', '').strip()
+    
+    if not message:
+        return redirect('chatbot:inbox')
+    
+    whatsapp = WhatsAppService()
+    
+    if scope == 'all':
+        conversations = Conversation.objects.filter(is_active=True)
+        sent = 0
+        for conv in conversations:
+            if conv.phone_number:
+                if whatsapp.send_text_message(conv.phone_number, message):
+                    sent += 1
+        logger.info(f"Alerta enviada a {sent} conversaciones")
+        messages.success(request, f'✅ Alerta enviada a {sent} conversaciones.')
+    else:
+        try:
+            conv = Conversation.objects.get(id=conversation_id)
+            if whatsapp.send_text_message(conv.phone_number, message):
+                messages.success(request, '✅ Alerta enviada.')
+        except Conversation.DoesNotExist:
+            messages.error(request, 'Conversación no encontrada.')
+    
+    return redirect('chatbot:inbox')
 
 
 @require_http_methods(["GET"])

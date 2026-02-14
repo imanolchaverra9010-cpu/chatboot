@@ -134,6 +134,10 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Login para inbox
+LOGIN_URL = '/admin/login/'
+LOGIN_REDIRECT_URL = '/chatbot/inbox/'
+
 
 # --- WhatsApp Configuration ---
 META_PHONE_NUMBER_ID = os.getenv('META_PHONE_NUMBER_ID', '')

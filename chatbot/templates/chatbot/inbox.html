@@ -1,0 +1,188 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inbox - WhatsApp Chatbot</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: #075E54; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.2rem; }
+        .header-actions a { color: white; text-decoration: none; margin-left: 12px; font-size: 0.9rem; }
+        .main { flex: 1; display: flex; overflow: hidden; }
+        .sidebar { width: 360px; border-right: 1px solid #e0e0e0; overflow-y: auto; background: #fff; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #e5ddd5; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23e5ddd5" width="100" height="100"/><path fill="%23d1ccc0" opacity="0.3" d="M0 50 Q25 40 50 50 T100 50 V100 H0 Z"/></svg>'); }
+        .conversation-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; }
+        .conversation-item:hover { background: #f5f5f5; }
+        .conversation-item.active { background: #e8f4f8; }
+        .conv-avatar { width: 48px; height: 48px; border-radius: 50%; background: #075E54; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 12px; }
+        .conv-info { flex: 1; min-width: 0; }
+        .conv-name { font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conv-preview { font-size: 0.85rem; color: #667781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conv-date { font-size: 0.75rem; color: #667781; }
+        .chat-header { background: #f0f2f5; padding: 12px 20px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
+        .chat-header h2 { font-size: 1rem; }
+        .chat-header .phone { color: #667781; font-size: 0.85rem; }
+        .btn-alert { background: #25D366; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; }
+        .btn-alert:hover { background: #20bd5a; }
+        .messages-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .message { max-width: 65%; padding: 8px 12px; border-radius: 8px; position: relative; word-wrap: break-word; }
+        .message.incoming { align-self: flex-start; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border-top-left-radius: 2px; }
+        .message.outgoing { align-self: flex-end; background: #D9FDD3; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border-top-right-radius: 2px; }
+        .message .content { font-size: 0.95rem; line-height: 1.4; }
+        .message .time { font-size: 0.7rem; color: #667781; text-align: right; margin-top: 4px; }
+        .empty-chat { flex: 1; display: flex; align-items: center; justify-content: center; color: #667781; font-size: 1rem; }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; border-radius: 12px; padding: 24px; width: 90%; max-width: 480px; }
+        .modal-content h3 { margin-bottom: 16px; }
+        .modal-content label { display: block; margin-bottom: 8px; font-weight: 500; }
+        .modal-content select, .modal-content textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 16px; }
+        .modal-content textarea { min-height: 100px; resize: vertical; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+        .modal-actions button { padding: 10px 20px; border-radius: 8px; cursor: pointer; border: none; font-size: 0.95rem; }
+        .modal-actions .btn-cancel { background: #f0f0f0; }
+        .modal-actions .btn-send { background: #25D366; color: white; }
+        .search-box { padding: 8px; border-bottom: 1px solid #e0e0e0; }
+        .search-box input { width: 100%; padding: 10px 12px; border: none; background: #f0f2f5; border-radius: 8px; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    {% if messages %}
+    <div style="padding: 12px 20px; background: #25D366; color: white; text-align: center;">
+        {% for msg in messages %}{{ msg }}{% endfor %}
+    </div>
+    {% endif %}
+    <header class="header">
+        <h1>📱 Inbox WhatsApp Chatbot</h1>
+        <div class="header-actions">
+            <a href="{% url 'admin:index' %}">Admin</a>
+            <a href="{% url 'chatbot:status' %}" target="_blank">Status</a>
+            <a href="{% url 'admin:logout' %}?next=/chatbot/inbox/">Salir</a>
+        </div>
+    </header>
+    
+    <div class="main">
+        <aside class="sidebar">
+            <div class="search-box">
+                <input type="text" id="searchConv" placeholder="Buscar conversación..." onkeyup="filterConvs()">
+            </div>
+            {% for conv in conversations %}
+            <div class="conversation-item" data-id="{{ conv.id }}" data-phone="{{ conv.phone_number }}" data-name="{{ conv.name|default:conv.phone_number }}" onclick="loadConversation({{ conv.id }}, this.dataset.name, '{{ conv.phone_number }}')">
+                <div class="conv-avatar">{{ conv.name|default:conv.phone_number|slice:":1"|upper }}</div>
+                <div class="conv-info">
+                    <div class="conv-name">{{ conv.name|default:conv.phone_number }}</div>
+                    <div class="conv-preview">{{ conv.last_message|default:"Sin mensajes"|truncatechars:40 }}</div>
+                </div>
+                <div class="conv-date">{{ conv.updated_at|timesince }}</div>
+            </div>
+            {% empty %}
+            <div style="padding: 20px; color: #667781;">No hay conversaciones.</div>
+            {% endfor %}
+        </aside>
+        
+        <section class="chat-area">
+            <div id="emptyState" class="empty-chat">
+                Selecciona una conversación
+            </div>
+            <div id="chatContent" style="display: none; flex: 1; flex-direction: column; display: none;">
+                <div class="chat-header">
+                    <div>
+                        <h2 id="chatName">-</h2>
+                        <span class="phone" id="chatPhone">-</span>
+                    </div>
+                    <button class="btn-alert" onclick="openAlertModal()">📢 Enviar alerta</button>
+                </div>
+                <div class="messages-container" id="messagesContainer"></div>
+            </div>
+        </section>
+    </div>
+    
+    <div id="alertModal" class="modal">
+        <div class="modal-content">
+            <h3>📢 Enviar alerta</h3>
+            <form id="alertForm" method="post" action="{% url 'chatbot:send_alert' %}">
+                {% csrf_token %}
+                <input type="hidden" name="conversation_id" id="alertConvId">
+                <label>Destinatario(s)</label>
+                <select name="scope" id="alertScope">
+                    <option value="single">Solo esta conversación</option>
+                    <option value="all">Todas las conversaciones activas</option>
+                </select>
+                <label>Mensaje de la alerta</label>
+                <textarea name="message" id="alertMessage" required placeholder="Escribe el mensaje que se enviará por WhatsApp..."></textarea>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeAlertModal()">Cancelar</button>
+                    <button type="submit" class="btn-send">Enviar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        let currentConvId = null;
+        const messagesUrl = "{% url 'chatbot:conversation_messages' conversation_id=0 %}";
+        
+        function loadConversation(id, name, phone) {
+            currentConvId = id;
+            document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active'));
+            document.querySelector(`[data-id="${id}"]`).classList.add('active');
+            document.getElementById('chatName').textContent = name || phone;
+            document.getElementById('chatPhone').textContent = phone;
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('chatContent').style.display = 'flex';
+            document.getElementById('alertConvId').value = id;
+            
+            fetch(messagesUrl.replace('0', id))
+                .then(r => r.json())
+                .then(data => {
+                    const container = document.getElementById('messagesContainer');
+                    container.innerHTML = '';
+                    if (data.messages && data.messages.length) {
+                        data.messages.reverse().forEach(msg => {
+                            const div = document.createElement('div');
+                            div.className = 'message ' + msg.direction;
+                            div.innerHTML = '<div class="content">' + escapeHtml(msg.content) + '</div><div class="time">' + msg.time + '</div>';
+                            container.appendChild(div);
+                        });
+                    } else {
+                        container.innerHTML = '<div class="empty-chat">Sin mensajes</div>';
+                    }
+                    container.scrollTop = container.scrollHeight;
+                });
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(/\n/g, '<br>');
+        }
+        
+        function filterConvs() {
+            const q = document.getElementById('searchConv').value.toLowerCase();
+            document.querySelectorAll('.conversation-item').forEach(el => {
+                const name = (el.dataset.phone || '').toLowerCase();
+                const match = name.includes(q) || el.textContent.toLowerCase().includes(q);
+                el.style.display = match ? 'flex' : 'none';
+            });
+        }
+        
+        function openAlertModal() {
+            if (!currentConvId) return;
+            document.getElementById('alertModal').classList.add('show');
+        }
+        
+        function closeAlertModal() {
+            document.getElementById('alertModal').classList.remove('show');
+        }
+        
+        document.getElementById('alertForm').onsubmit = function() {
+            const msg = document.getElementById('alertMessage').value.trim();
+            if (!msg) { alert('Escribe un mensaje'); return false; }
+            if (document.getElementById('alertScope').value === 'all' && !confirm('¿Enviar a TODAS las conversaciones activas?')) return false;
+        };
+    </script>
+</body>
+</html>
