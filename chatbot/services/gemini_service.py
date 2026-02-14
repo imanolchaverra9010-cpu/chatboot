@@ -425,7 +425,6 @@ class GeminiService:
         Llama a generate_content con reintento ante error 429 (cuota/rate limit).
         Retorna None si se excedió la cuota tras los reintentos.
         """
-        last_error = None
         for attempt in range(max_retries + 1):
             try:
                 return self.model.generate_content(prompt)
@@ -750,6 +749,21 @@ Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de barrio, n
             logger.error(f"Error analizando imagen: {str(e)}", exc_info=True)
             return "Lo siento, hubo un error al analizar la imagen. Por favor intenta de nuevo."
     
+    def _load_media_as_part(self, file_path, mime_type):
+        """
+        Carga archivo (video/audio) como Part inline_data.
+        genai.upload_file fue deprecado/eliminado, usamos datos inline.
+        Límite recomendado: ~20MB para Gemini inline.
+        """
+        import mimetypes
+        max_bytes = 19 * 1024 * 1024  # 19 MB
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        if len(data) > max_bytes:
+            raise ValueError(f"Archivo demasiado grande ({len(data)//1024//1024}MB). Máximo ~20MB.")
+        mime = mime_type or mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+        return {'inline_data': {'mime_type': mime, 'data': data}}
+    
     def process_video(self, video_path, user_message="", context=""):
         """
         Procesar video usando Gemini (descripción, transcripción si tiene audio)
@@ -766,7 +780,7 @@ Ombe, te respondo clarito y con buena onda 😊 Hablo como la gente de barrio, n
             return "Lo siento, el servicio de análisis de videos no está configurado."
         
         try:
-            video_file = genai.upload_file(path=video_path)
+            video_part = self._load_media_as_part(video_path, 'video/mp4')
             
             prompt = f"""Ey parce, soy Luisa, tu parcera de barrio en Quibdó.
 
@@ -784,7 +798,7 @@ Mirá manito, voy a ver este video que me mandaste y te cuento qué pasa:
 Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafos."""
             
             try:
-                response = self.model.generate_content([prompt, video_file])
+                response = self.model.generate_content([prompt, video_part])
             except ResourceExhausted:
                 logger.warning("Gemini: cuota excedida en process_video")
                 return MSG_CUOTA_EXCEDIDA
@@ -794,6 +808,10 @@ Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafo
                 return response.text.strip()
             return "No pude procesar el video en este momento."
         
+        except ValueError as e:
+            if 'demasiado grande' in str(e).lower():
+                return "Ey manito, el video es muy pesado (máx ~20MB). Envía uno más corto o comprimido."
+            raise
         except Exception as e:
             logger.error(f"Error procesando video: {str(e)}", exc_info=True)
             return "Lo siento, hubo un error al analizar el video. Verifica que sea formato MP4 o similar."
@@ -812,23 +830,18 @@ Responde claro, como la gente de barrio, natural y chevere. Máximo 2-3 párrafo
             return None
         
         try:
-            # Gemini 2.0 puede procesar audio directamente
             import mimetypes
-            
-            # Detectar tipo de archivo
             mime_type, _ = mimetypes.guess_type(audio_path)
+            mime_type = mime_type or 'audio/ogg'
             
-            # Subir archivo a Gemini
-            audio_file = genai.upload_file(path=audio_path)
+            audio_part = self._load_media_as_part(audio_path, mime_type)
             
-            # Crear prompt para transcripción
             prompt = """Transcribe el siguiente audio a texto en español.
             
 Proporciona SOLO la transcripción exacta, sin comentarios adicionales."""
             
-            # Generar transcripción
             try:
-                response = self.model.generate_content([prompt, audio_file])
+                response = self.model.generate_content([prompt, audio_part])
             except ResourceExhausted:
                 logger.warning("Gemini: cuota excedida en transcribe_audio")
                 return None
@@ -840,6 +853,10 @@ Proporciona SOLO la transcripción exacta, sin comentarios adicionales."""
                 logger.warning("No se pudo transcribir el audio")
                 return None
         
+        except ValueError as e:
+            if 'demasiado grande' in str(e).lower():
+                logger.warning("Audio demasiado grande para transcripción")
+            return None
         except Exception as e:
             logger.error(f"Error transcribiendo audio: {str(e)}", exc_info=True)
             return None

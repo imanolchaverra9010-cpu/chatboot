@@ -463,7 +463,9 @@ def process_message(message_data, value):
             except Exception as e:
                 logger.warning(f"Error registrando consulta analítica: {e}")
             
-            # Enviar por WhatsApp
+            # Enviar por WhatsApp (asegurar texto válido)
+            if not response_text or not str(response_text).strip():
+                response_text = "Lo siento, no pude generar una respuesta. Escribe *HUMANO* para hablar con un asesor."
             response_message_id = whatsapp_service.send_text_message(from_number, response_text)
             
             if response_message_id:
@@ -502,6 +504,8 @@ def process_message(message_data, value):
             else:
                 response_text = "He recibido tu archivo. Por ahora proceso imágenes, audios, videos y stickers."
             
+            if not response_text or not str(response_text).strip():
+                response_text = "Lo siento, hubo un error. Escribe *HUMANO* para hablar con un asesor."
             whatsapp_service = WhatsAppService()
             whatsapp_service.send_text_message(from_number, response_text)
     

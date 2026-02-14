@@ -29,48 +29,52 @@ class WhatsAppService:
     
     def send_text_message(self, to_number, text):
         """
-        Enviar mensaje de texto
+        Enviar mensaje de texto. Si es muy largo (>4096), lo divide en varios mensajes.
         
         Args:
             to_number: Número de teléfono del destinatario
-            text: Texto del mensaje
+            text: Texto del mensaje (None/vacío no se envía)
         
         Returns:
-            message_id si tiene éxito, None en caso de error
+            message_id del último mensaje enviado, o None en caso de error
         """
-        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to_number,
-            "type": "text",
-            "text": {
-                "preview_url": False,
-                "body": text
-            }
-        }
-        
-        try:
-            response = requests.post(
-                url,
-                headers=self._get_headers(),
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            message_id = data.get('messages', [{}])[0].get('id')
-            
-            logger.info(f"Mensaje enviado exitosamente: {message_id}")
-            return message_id
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error enviando mensaje: {str(e)}")
-            if hasattr(e.response, 'text'):
-                logger.error(f"Respuesta de error: {e.response.text}")
+        if not text or not str(text).strip():
+            logger.warning("send_text_message: texto vacío, no se envía")
             return None
+        text = str(text).strip()
+        
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        max_len = 4000
+        chunks = [text[i:i + max_len] for i in range(0, len(text), max_len)] if len(text) > max_len else [text]
+        last_id = None
+        for chunk in chunks:
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to_number,
+                "type": "text",
+                "text": {
+                    "preview_url": False,
+                    "body": chunk
+                }
+            }
+            try:
+                response = requests.post(
+                    url,
+                    headers=self._get_headers(),
+                    json=payload,
+                    timeout=10
+                )
+                response.raise_for_status()
+                data = response.json()
+                last_id = data.get('messages', [{}])[0].get('id')
+                logger.info(f"Mensaje enviado exitosamente: {last_id}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Error enviando mensaje: {str(e)}")
+                if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                    logger.error(f"Respuesta de error: {e.response.text}")
+                return last_id if last_id else None
+        return last_id
     
     def send_template_message(self, to_number, template_name, language_code='es'):
         """
