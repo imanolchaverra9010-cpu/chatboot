@@ -7,8 +7,9 @@ from django.db.models import Q, Count, Sum, Avg
 from datetime import datetime, time
 from ..models import (
     Negocio, HorarioAtencion, ProductoNegocio, CategoriaNegocio, ResenaNegocio,
-    EventoDeportivo,
-    Cliente, Producto, Pedido, DetallePedido
+    EventoDeportivo, Boleteria, TramiteRequisitos, Turno, Alerta,
+    ConsultaAnalitica, Escalamiento,
+    Cliente, Producto, Pedido, DetallePedido, Conversation
 )
 
 logger = logging.getLogger('chatbot')
@@ -443,6 +444,256 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error obteniendo evento: {e}")
             return None
+    
+    # ==================== BOLETERÍA ====================
+    
+    @staticmethod
+    def obtener_boleteria_evento(evento_id=None, nombre_evento=None):
+        """Obtener información de boletería para un evento"""
+        try:
+            if evento_id:
+                return Boleteria.objects.filter(evento_id=evento_id, activo=True).first()
+            if nombre_evento:
+                return Boleteria.objects.filter(
+                    nombre_evento__icontains=nombre_evento, activo=True
+                ).first()
+            return None
+        except Exception as e:
+            logger.error(f"Error obteniendo boletería: {e}")
+            return None
+    
+    @staticmethod
+    def listar_boleteria_activa(limit=10):
+        """Listar boletería activa de eventos próximos"""
+        try:
+            from datetime import datetime, timedelta
+            ahora = datetime.now()
+            limite = ahora + timedelta(days=60)
+            eventos_ids = EventoDeportivo.objects.filter(
+                activo=True,
+                fecha_evento__gte=ahora,
+                fecha_evento__lte=limite
+            ).values_list('id', flat=True)
+            return Boleteria.objects.filter(
+                activo=True
+            ).filter(
+                Q(evento_id__in=eventos_ids) | Q(nombre_evento__isnull=False)
+            )[:limit]
+        except Exception as e:
+            logger.error(f"Error listando boletería: {e}")
+            return []
+    
+    # ==================== TRÁMITES Y REQUISITOS ====================
+    
+    @staticmethod
+    def obtener_tramites(query=None, limit=10):
+        """Obtener lista de trámites disponibles"""
+        try:
+            tramites = TramiteRequisitos.objects.filter(activo=True)
+            if query:
+                tramites = tramites.filter(
+                    Q(nombre__icontains=query) |
+                    Q(descripcion__icontains=query) |
+                    Q(entidad__icontains=query)
+                )
+            return tramites.order_by('orden', 'nombre')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo trámites: {e}")
+            return []
+    
+    @staticmethod
+    def obtener_tramite_por_nombre(nombre):
+        """Buscar trámite por nombre"""
+        try:
+            return TramiteRequisitos.objects.filter(
+                nombre__icontains=nombre, activo=True
+            ).first()
+        except Exception as e:
+            logger.error(f"Error buscando trámite: {e}")
+            return None
+    
+    # ==================== TURNOS (RESERVAR / CANCELAR) ====================
+    
+    @staticmethod
+    def obtener_turnos_disponibles(servicio=None, fecha=None, limit=20):
+        """Obtener turnos disponibles para reservar"""
+        try:
+            from datetime import datetime, timedelta
+            hoy = datetime.now().date()
+            turnos = Turno.objects.filter(
+                estado='disponible',
+                fecha_turno__gte=hoy
+            )
+            if servicio:
+                turnos = turnos.filter(servicio__icontains=servicio)
+            if fecha:
+                turnos = turnos.filter(fecha_turno=fecha)
+            return turnos.order_by('fecha_turno', 'hora_inicio')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo turnos: {e}")
+            return []
+    
+    @staticmethod
+    def reservar_turno(turno_id, conversation, telefono):
+        """Reservar un turno"""
+        try:
+            turno = Turno.objects.get(id=turno_id, estado='disponible')
+            turno.estado = 'reservado'
+            turno.conversation = conversation
+            turno.telefono_reserva = telefono
+            turno.save()
+            return turno
+        except Turno.DoesNotExist:
+            return None
+        except Exception as e:
+            logger.error(f"Error reservando turno: {e}")
+            return None
+    
+    @staticmethod
+    def cancelar_turno(turno_id, telefono):
+        """Cancelar un turno reservado"""
+        try:
+            turno = Turno.objects.get(id=turno_id)
+            if turno.telefono_reserva == telefono or turno.estado == 'reservado':
+                turno.estado = 'cancelado'
+                turno.telefono_reserva = ''
+                turno.conversation = None
+                turno.save()
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error cancelando turno: {e}")
+            return False
+    
+    @staticmethod
+    def obtener_turnos_usuario(telefono, limit=10):
+        """Obtener turnos reservados por un usuario"""
+        try:
+            return Turno.objects.filter(
+                telefono_reserva=telefono,
+                estado='reservado',
+                fecha_turno__gte=datetime.now().date()
+            ).order_by('fecha_turno', 'hora_inicio')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo turnos usuario: {e}")
+            return []
+    
+    # ==================== ALERTAS (CAMBIOS DE ÚLTIMA HORA) ====================
+    
+    @staticmethod
+    def obtener_alertas_activas(limit=5):
+        """Obtener alertas activas de última hora"""
+        try:
+            from django.utils import timezone
+            ahora = timezone.now()
+            return Alerta.objects.filter(
+                activo=True,
+                fecha_inicio__lte=ahora
+            ).filter(
+                Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=ahora)
+            ).order_by('prioridad', '-fecha_inicio')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo alertas: {e}")
+            return []
+    
+    # ==================== ANALYTICS (POWER IN DATA) ====================
+    
+    @staticmethod
+    def registrar_consulta_analitica(phone_number, motivo_consulta, intent_detectado,
+                                    barrio='', edad_rango='', conversation=None,
+                                    resuelto=False, escalado_humano=False, metadata=None):
+        """Registrar consulta para análisis"""
+        try:
+            return ConsultaAnalitica.objects.create(
+                phone_number=phone_number,
+                motivo_consulta=motivo_consulta or '',
+                intent_detectado=intent_detectado or '',
+                barrio=barrio,
+                edad_rango=edad_rango,
+                conversation=conversation,
+                resuelto=resuelto,
+                escalado_humano=escalado_humano,
+                metadata=metadata or {}
+            )
+        except Exception as e:
+            logger.error(f"Error registrando consulta analítica: {e}")
+            return None
+    
+    @staticmethod
+    def obtener_tendencias_consultas(dias=7, limit=10):
+        """Obtener tendencias de consultas por motivo"""
+        try:
+            from django.utils import timezone
+            desde = timezone.now() - timezone.timedelta(days=dias)
+            return ConsultaAnalitica.objects.filter(
+                fecha_consulta__gte=desde
+            ).values('motivo_consulta', 'intent_detectado').annotate(
+                total=Count('id')
+            ).order_by('-total')[:limit]
+        except Exception as e:
+            logger.error(f"Error obteniendo tendencias: {e}")
+            return []
+    
+    @staticmethod
+    def obtener_segmentacion_barrio(dias=30):
+        """Segmentación por barrio"""
+        try:
+            from django.utils import timezone
+            desde = timezone.now() - timezone.timedelta(days=dias)
+            return list(ConsultaAnalitica.objects.filter(
+                fecha_consulta__gte=desde,
+                barrio__isnull=False
+            ).exclude(barrio='').values('barrio').annotate(
+                total=Count('id')
+            ).order_by('-total'))
+        except Exception as e:
+            logger.error(f"Error obteniendo segmentación: {e}")
+            return []
+    
+    # ==================== ESCALAMIENTO ====================
+    
+    @staticmethod
+    def crear_escalamiento(conversation, motivo, canal='whatsapp', numero_whatsapp=''):
+        """Crear escalamiento a humano"""
+        try:
+            return Escalamiento.objects.create(
+                conversation=conversation,
+                motivo=motivo,
+                canal_destino=canal,
+                numero_whatsapp=numero_whatsapp
+            )
+        except Exception as e:
+            logger.error(f"Error creando escalamiento: {e}")
+            return None
+    
+    @staticmethod
+    def registrar_feedback_escalamiento(escalamiento_id, feedback, resuelto_por_bot=None):
+        """Registrar feedback de caso escalado"""
+        try:
+            from django.utils import timezone
+            esc = Escalamiento.objects.get(id=escalamiento_id)
+            esc.feedback_sistema = feedback
+            if resuelto_por_bot is not None:
+                esc.resuelto_por_bot = resuelto_por_bot
+            esc.estado = 'resuelto'
+            esc.fecha_resolucion = timezone.now()
+            esc.save()
+            return True
+        except Exception as e:
+            logger.error(f"Error registrando feedback: {e}")
+            return False
+    
+    # ==================== CÓMO LLEGAR (MAPAS) ====================
+    
+    @staticmethod
+    def generar_link_google_maps(direccion, lat=None, lon=None):
+        """Generar link de Google Maps para cómo llegar"""
+        if lat and lon:
+            return f"https://www.google.com/maps?q={lat},{lon}"
+        if direccion:
+            from urllib.parse import quote
+            return f"https://www.google.com/maps/search/?api=1&query={quote(direccion)}"
+        return None
     
     # ==================== MÉTODOS ORIGINALES (COMPATIBILIDAD) ====================
     

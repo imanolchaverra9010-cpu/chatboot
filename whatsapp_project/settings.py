@@ -144,6 +144,10 @@ META_WEBHOOK_SECRET = os.getenv('META_WEBHOOK_SECRET', '')
 # --- Gemini Configuration ---
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 
+# --- Escalamiento a Humano ---
+# Número de WhatsApp o CRM para escalar casos no resueltos
+ESCALAMIENTO_WHATSAPP = os.getenv('ESCALAMIENTO_WHATSAPP', '')
+
 # --- Logging Configuration ---
 LOGGING = {
     'version': 1,

@@ -230,6 +230,160 @@ class CategoriaNegocio(models.Model):
         return self.nombre
 
 
+# --- MÓDULOS CIUDADANÍA / LOGÍSTICA / BOLETERÍA ---
+
+class TramiteRequisitos(models.Model):
+    """Requisitos de trámites y turnos para ciudadanía"""
+    nombre = models.CharField(max_length=255)
+    descripcion = models.TextField()
+    entidad = models.CharField(max_length=200, blank=True, help_text="Entidad que maneja el trámite")
+    requisitos = models.JSONField(default=list, help_text="Lista de requisitos ['Doc identidad', 'Formulario X', ...]")
+    documentos_necesarios = models.TextField(blank=True)
+    costo = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    link_turno = models.URLField(blank=True)
+    link_info = models.URLField(blank=True)
+    horario_atencion = models.TextField(blank=True)
+    activo = models.BooleanField(default=True)
+    orden = models.IntegerField(default=0)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'tramites_requisitos'
+        verbose_name = 'Trámite/Requisitos'
+        verbose_name_plural = 'Trámites/Requisitos'
+        ordering = ['orden', 'nombre']
+    
+    def __str__(self):
+        return self.nombre
+
+
+class Turno(models.Model):
+    """Turnos disponibles para reservar/cancelar"""
+    ESTADOS = [
+        ('disponible', 'Disponible'),
+        ('reservado', 'Reservado'),
+        ('cancelado', 'Cancelado'),
+        ('completado', 'Completado'),
+    ]
+    
+    servicio = models.CharField(max_length=200, help_text="Ej: Cita médica, Trámite notaría")
+    fecha_turno = models.DateField()
+    hora_inicio = models.TimeField()
+    hora_fin = models.TimeField()
+    telefono_reserva = models.CharField(max_length=20, blank=True)
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='turnos'
+    )
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='disponible')
+    notas = models.TextField(blank=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'turnos'
+        verbose_name = 'Turno'
+        verbose_name_plural = 'Turnos'
+        ordering = ['fecha_turno', 'hora_inicio']
+    
+    def __str__(self):
+        return f"{self.servicio} - {self.fecha_turno} {self.hora_inicio} ({self.estado})"
+
+
+class Alerta(models.Model):
+    """Alertas y cambios de última hora"""
+    TIPOS = [
+        ('evento', 'Evento'),
+        ('horario', 'Horario'),
+        ('cierre', 'Cierre'),
+        ('transporte', 'Transporte'),
+        ('general', 'General'),
+    ]
+    
+    titulo = models.CharField(max_length=255)
+    mensaje = models.TextField()
+    tipo = models.CharField(max_length=20, choices=TIPOS, default='general')
+    fecha_inicio = models.DateTimeField(auto_now_add=True)
+    fecha_fin = models.DateTimeField(null=True, blank=True)
+    activo = models.BooleanField(default=True)
+    prioridad = models.IntegerField(default=1, help_text="1=alta, 2=media, 3=baja")
+    
+    class Meta:
+        db_table = 'alertas'
+        verbose_name = 'Alerta'
+        verbose_name_plural = 'Alertas'
+        ordering = ['-prioridad', '-fecha_inicio']
+    
+    def __str__(self):
+        return f"[{self.tipo}] {self.titulo}"
+
+
+class ConsultaAnalitica(models.Model):
+    """Registro de consultas para análisis (Power in Data)"""
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='consultas_analiticas',
+        null=True,
+        blank=True
+    )
+    phone_number = models.CharField(max_length=20, db_index=True)
+    motivo_consulta = models.CharField(max_length=200, blank=True)
+    intent_detectado = models.CharField(max_length=100, blank=True)
+    barrio = models.CharField(max_length=100, blank=True)
+    edad_rango = models.CharField(max_length=20, blank=True, help_text="Ej: 18-25, 26-35")
+    resuelto = models.BooleanField(default=False)
+    escalado_humano = models.BooleanField(default=False)
+    feedback = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict)
+    fecha_consulta = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'consultas_analiticas'
+        verbose_name = 'Consulta Analítica'
+        verbose_name_plural = 'Consultas Analíticas'
+        ordering = ['-fecha_consulta']
+    
+    def __str__(self):
+        return f"{self.phone_number} - {self.motivo_consulta or 'Consulta'} - {self.fecha_consulta}"
+
+
+class Escalamiento(models.Model):
+    """Casos escalados a humano y feedback"""
+    ESTADOS = [
+        ('pendiente', 'Pendiente'),
+        ('en_atencion', 'En Atención'),
+        ('resuelto', 'Resuelto'),
+        ('cerrado', 'Cerrado'),
+    ]
+    
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='escalamientos'
+    )
+    motivo = models.TextField()
+    canal_destino = models.CharField(max_length=50, default='whatsapp')  # whatsapp, crm, call_center
+    numero_whatsapp = models.CharField(max_length=20, blank=True)
+    ticket_crm = models.CharField(max_length=100, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='pendiente')
+    feedback_sistema = models.TextField(blank=True, help_text="Para mejorar el bot")
+    resuelto_por_bot = models.BooleanField(null=True, help_text="Si después se resolvió por bot")
+    fecha_escalamiento = models.DateTimeField(auto_now_add=True)
+    fecha_resolucion = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'escalamientos'
+        verbose_name = 'Escalamiento'
+        verbose_name_plural = 'Escalamientos'
+        ordering = ['-fecha_escalamiento']
+    
+    def __str__(self):
+        return f"Escalamiento #{self.id} - {self.conversation.phone_number} ({self.estado})"
+
+
 class ResenaNegocio(models.Model):
     """Reseñas y calificaciones de negocios"""
     negocio = models.ForeignKey(Negocio, on_delete=models.CASCADE, related_name='resenas')
@@ -309,6 +463,35 @@ class EventoDeportivo(models.Model):
         ahora = datetime.now()
         return ahora <= self.fecha_evento <= ahora + timedelta(days=7)
 
+
+class Boleteria(models.Model):
+    """Boletería: precios, puntos de venta y links de compra para eventos"""
+    evento = models.ForeignKey(
+        EventoDeportivo,
+        on_delete=models.CASCADE,
+        related_name='boleteria',
+        null=True,
+        blank=True
+    )
+    nombre_evento = models.CharField(max_length=255, help_text="Nombre si no hay evento asociado", blank=True)
+    precio_general = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    precio_vip = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    precio_niños = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    entrada_gratis = models.BooleanField(default=False)
+    link_compra = models.URLField(blank=True, help_text="Link para compra en línea")
+    puntos_venta = models.TextField(blank=True, help_text="Puntos de venta físicos")
+    notas = models.TextField(blank=True)
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'boleteria'
+        verbose_name = 'Boletería'
+        verbose_name_plural = 'Boleterías'
+    
+    def __str__(self):
+        nombre = self.nombre_evento or (self.evento.nombre if self.evento else 'N/A')
+        return f"Boletería - {nombre}"
 
 
 # --- MODELOS ORIGINALES DE ÉBANO COMPANY (COMPATIBILIDAD) ---

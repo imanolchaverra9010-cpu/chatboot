@@ -277,6 +277,108 @@ class GeminiService:
                 context += "• 'Quiero calificar [nombre del negocio]'\n"
                 context += "• 'Dejar reseña de [nombre del negocio]'\n"
                 context += "Te pediré tu calificación (1-5 estrellas) y tu comentario.\n"
+            
+            # === MÓDULO BOLETERÍA (precios, puntos de venta, links) ===
+            keywords_boleteria = ['boletería', 'boleteria', 'boleto', 'entrada', 'comprar entrada',
+                                 'precio entrada', 'puntos de venta', 'link compra', 'ticket']
+            if any(kw in message_lower for kw in keywords_boleteria + keywords_eventos):
+                eventos_list = self.db_service.obtener_eventos_proximos(dias=30, limit=5)
+                boleteria_agregada = False
+                for evento in eventos_list:
+                    boleto = self.db_service.obtener_boleteria_evento(evento_id=evento.id)
+                    if boleto:
+                        boleteria_agregada = True
+                        context += f"\n\n🎫 **BOLETERÍA - {evento.nombre}:**\n"
+                        if boleto.entrada_gratis:
+                            context += "💰 Entrada GRATIS\n"
+                        else:
+                            if boleto.precio_general:
+                                context += f"💰 General: ${boleto.precio_general:,.0f}\n"
+                            if boleto.precio_vip:
+                                context += f"💰 VIP: ${boleto.precio_vip:,.0f}\n"
+                            if boleto.precio_niños:
+                                context += f"💰 Niños: ${boleto.precio_niños:,.0f}\n"
+                        if boleto.puntos_venta:
+                            context += f"📍 Puntos de venta: {boleto.puntos_venta}\n"
+                        if boleto.link_compra:
+                            context += f"🔗 Comprar en línea: {boleto.link_compra}\n"
+                if not boleteria_agregada and eventos_list:
+                    context += "\n\n🎫 **BOLETERÍA:** Consulta la agenda de eventos. Los precios se publican por evento.\n"
+            
+            # === MÓDULO TRÁMITES Y REQUISITOS ===
+            keywords_tramites = ['trámite', 'tramite', 'requisitos', 'requisito', 'documentos',
+                                'cita', 'certificado', 'licencia', 'permiso', 'turno', 'sacar']
+            if any(kw in message_lower for kw in keywords_tramites):
+                tramites = self.db_service.obtener_tramites(query=message, limit=5)
+                if tramites:
+                    context += "\n\n📋 **TRÁMITES Y REQUISITOS:**\n"
+                    for t in tramites:
+                        context += f"\n**{t.nombre}**\n"
+                        context += f"📝 {t.descripcion[:150]}...\n" if len(t.descripcion) > 150 else f"📝 {t.descripcion}\n"
+                        if t.entidad:
+                            context += f"🏛️ Entidad: {t.entidad}\n"
+                        if t.requisitos:
+                            reqs = t.requisitos if isinstance(t.requisitos, list) else []
+                            for r in reqs[:5]:
+                                context += f"  • {r}\n"
+                        if t.costo:
+                            context += f"💰 Costo: ${t.costo:,.0f}\n"
+                        if t.link_turno:
+                            context += f"🔗 Sacar turno: {t.link_turno}\n"
+                        if t.horario_atencion:
+                            context += f"🕐 {t.horario_atencion}\n"
+            
+            # === MÓDULO TURNOS (reservar/cancelar) ===
+            keywords_turnos = ['turno disponible', 'reservar turno', 'cancelar turno', 'turnos',
+                              'agendar', 'reservar cita', 'cancelar cita', 'citas disponibles']
+            if any(kw in message_lower for kw in keywords_turnos):
+                turnos = self.db_service.obtener_turnos_disponibles(limit=10)
+                if turnos:
+                    context += "\n\n📅 **TURNOS DISPONIBLES:**\n"
+                    context += "Puedes decir 'reservar turno [número]' o 'cancelar turno [número]'\n"
+                    for i, t in enumerate(turnos[:8], 1):
+                        context += f"{i}. {t.servicio} - {t.fecha_turno} {t.hora_inicio.strftime('%H:%M')} (ID: {t.id})\n"
+                if phone_number:
+                    mis_turnos = self.db_service.obtener_turnos_usuario(phone_number)
+                    if mis_turnos:
+                        context += "\n📌 **TUS TURNOS RESERVADOS:**\n"
+                        for t in mis_turnos:
+                            context += f"• {t.servicio} - {t.fecha_turno} {t.hora_inicio.strftime('%H:%M')} (ID: {t.id})\n"
+            
+            # === MÓDULO CÓMO LLEGAR (mapas, rutas, transporte) ===
+            keywords_como_llegar = ['cómo llegar', 'como llegar', 'ruta', 'transporte', 'mapa',
+                                   'direcciones', 'ubicación', 'ubicacion', 'waze', 'google maps']
+            if any(kw in message_lower for kw in keywords_como_llegar):
+                palabras = message_lower.split()
+                for palabra in palabras:
+                    if len(palabra) > 4:
+                        negocios = self.db_service.buscar_negocios(query=palabra, limit=3)
+                        if negocios:
+                            context += "\n\n🗺️ **CÓMO LLEGAR:**\n"
+                            for neg in negocios:
+                                link = self.db_service.generar_link_google_maps(
+                                    neg.direccion, neg.latitud, neg.longitud
+                                )
+                                if link:
+                                    context += f"**{neg.nombre}:** {link}\n"
+                            break
+                        eventos = self.db_service.buscar_eventos(query=palabra)
+                        if eventos:
+                            context += "\n\n🗺️ **CÓMO LLEGAR AL EVENTO:**\n"
+                            for ev in eventos[:2]:
+                                link = self.db_service.generar_link_google_maps(
+                                    f"{ev.lugar} {ev.direccion or ''}"
+                                )
+                                if link:
+                                    context += f"**{ev.nombre} - {ev.lugar}:** {link}\n"
+                            break
+            
+            # === MÓDULO ALERTAS (cambios de última hora) - SIEMPRE incluir ===
+            alertas = self.db_service.obtener_alertas_activas(limit=5)
+            if alertas:
+                context += "\n\n⚠️ **ALERTAS Y CAMBIOS DE ÚLTIMA HORA:**\n"
+                for a in alertas:
+                    context += f"• [{a.tipo.upper()}] {a.titulo}: {a.mensaje}\n"
         
         except Exception as e:
             logger.error(f"Error extrayendo información de negocios: {e}")
@@ -345,16 +447,21 @@ class GeminiService:
 **EL USUARIO DICE:**
 {message}
 
+**MÓDULOS QUE PUEDES ATENDER:**
+• Informativo: ubicación de locales, horarios, agenda eventos, boletería, requisitos de trámites
+• Logístico: turnos (reservar/cancelar), cómo llegar (mapas/rutas), alertas de cambios
+• Si NO puedes resolver: di "Escribe *HUMANO* para hablar con un asesor" (esto escala a humano)
+
 **IMPORTANTE:**
-1. USA SIEMPRE la información de los negocios que te di arriba
+1. USA SIEMPRE la información que te di arriba (negocios, eventos, boletería, trámites, turnos, alertas)
 2. Si hay negocios, menciónalos CON SUS PRODUCTOS/MENÚS incluidos
 3. Habla bien barrial pero respetuoso, como parcero de barrio
 4. Usa "parce", "manito", "llave", "hermano" - varía las expresiones
-5. Sé específica con direcciones, horarios y precios
+5. Sé específica con direcciones, horarios, precios y LINKS cuando existan
 6. Precios en formato colombiano: $50.000
 7. Respuestas cortas y directas (2-3 párrafos máximo)
-8. Si no sabes algo, dilo honesto y ofrece ayuda
-9. Si hay eventos deportivos en la info, menciónalos con entusiasmo
+8. Si NO sabes algo o NO puedes resolver: di honesto "Escribe *HUMANO* para hablar con un asesor"
+9. Si hay eventos deportivos en la info, menciónalos con boletería y links de compra si aplica
 10. Si preguntan por reseñas, explica cómo dejar una calificación
 
 **James**

@@ -5,7 +5,9 @@ from django.contrib import admin
 from .models import (
     Conversation, Message, BotContext,
     Negocio, HorarioAtencion, ProductoNegocio, 
-    CategoriaNegocio, ResenaNegocio
+    CategoriaNegocio, ResenaNegocio, EventoDeportivo,
+    Boleteria, TramiteRequisitos, Turno, Alerta,
+    ConsultaAnalitica, Escalamiento
 )
 
 
@@ -177,3 +179,54 @@ class ResenaNegocioAdmin(admin.ModelAdmin):
         count = queryset.update(aprobado=False)
         self.message_user(request, f'{count} reseña(s) rechazada(s).')
     rechazar_resenas.short_description = "Rechazar reseñas seleccionadas"
+
+
+# ==================== MÓDULOS CIUDADANÍA / LOGÍSTICA ====================
+
+@admin.register(EventoDeportivo)
+class EventoDeportivoAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'tipo_evento', 'fecha_evento', 'lugar', 'activo', 'destacado']
+    list_filter = ['tipo_evento', 'activo', 'destacado', 'entrada_gratis']
+    search_fields = ['nombre', 'equipo_local', 'equipo_visitante', 'lugar', 'barrio']
+    date_hierarchy = 'fecha_evento'
+
+
+@admin.register(Boleteria)
+class BoleteriaAdmin(admin.ModelAdmin):
+    list_display = ['nombre_evento', 'evento', 'precio_general', 'entrada_gratis', 'activo']
+    list_filter = ['activo', 'entrada_gratis']
+    search_fields = ['nombre_evento', 'puntos_venta']
+
+
+@admin.register(TramiteRequisitos)
+class TramiteRequisitosAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'entidad', 'costo', 'activo', 'orden']
+    list_filter = ['activo']
+    search_fields = ['nombre', 'entidad', 'descripcion']
+
+
+@admin.register(Turno)
+class TurnoAdmin(admin.ModelAdmin):
+    list_display = ['servicio', 'fecha_turno', 'hora_inicio', 'estado', 'telefono_reserva']
+    list_filter = ['estado', 'servicio']
+    date_hierarchy = 'fecha_turno'
+
+
+@admin.register(Alerta)
+class AlertaAdmin(admin.ModelAdmin):
+    list_display = ['titulo', 'tipo', 'prioridad', 'activo', 'fecha_inicio']
+    list_filter = ['tipo', 'activo', 'prioridad']
+
+
+@admin.register(ConsultaAnalitica)
+class ConsultaAnaliticaAdmin(admin.ModelAdmin):
+    list_display = ['phone_number', 'motivo_consulta', 'intent_detectado', 'resuelto', 'escalado_humano', 'fecha_consulta']
+    list_filter = ['resuelto', 'escalado_humano', 'barrio']
+    search_fields = ['phone_number', 'motivo_consulta']
+    date_hierarchy = 'fecha_consulta'
+
+
+@admin.register(Escalamiento)
+class EscalamientoAdmin(admin.ModelAdmin):
+    list_display = ['conversation', 'canal_destino', 'estado', 'fecha_escalamiento']
+    list_filter = ['estado', 'canal_destino']

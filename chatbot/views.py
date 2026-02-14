@@ -1,8 +1,10 @@
 """
 Views para manejar webhook de WhatsApp - VERSION CON DEBUG MEJORADO
+Incluye módulos: Informativo, Logístico, Analítico, Escalamiento
 """
 import logging
 import json
+import re
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -10,6 +12,7 @@ from django.conf import settings
 from .models import Conversation, Message
 from .services.whatsapp_service import WhatsAppService
 from .services.gemini_service import GeminiService
+from .services.db_service import DatabaseService
 
 logger = logging.getLogger('chatbot')
 
@@ -272,21 +275,101 @@ def process_message(message_data, value):
         
         # Procesar respuesta
         if message_type == 'text':
-            logger.info("         🤖 Generando respuesta con Gemini...")
+            whatsapp_service = WhatsAppService()
+            response_text = None
+            intent_detectado = 'general'
             
-            # Gemini
-            gemini_service = GeminiService()
-            recent_messages = conversation.get_recent_messages(limit=5)
-            context = "\n".join([
-                f"{'Usuario' if msg.direction == 'incoming' else 'Bot'}: {msg.content}"
-                for msg in reversed(list(recent_messages))
-            ])
+            # === ESCALAMIENTO: Usuario pide hablar con humano ===
+            if content.strip().upper() == 'HUMANO' or 'hablar con humano' in content.lower() or 'asesor' in content.lower():
+                db_service = DatabaseService()
+                escalamiento = db_service.crear_escalamiento(
+                    conversation=conversation,
+                    motivo=f"Usuario solicitó hablar con humano: {content}",
+                    canal='whatsapp',
+                    numero_whatsapp=from_number
+                )
+                db_service.registrar_consulta_analitica(
+                    phone_number=from_number,
+                    motivo_consulta=content,
+                    intent_detectado='escalamiento_humano',
+                    conversation=conversation,
+                    escalado_humano=True,
+                    metadata={'escalamiento_id': escalamiento.id if escalamiento else None}
+                )
+                numero_asesor = getattr(settings, 'ESCALAMIENTO_WHATSAPP', '') or ''
+                if numero_asesor:
+                    response_text = (
+                        "¡Listo manito! 🙋‍♂️ Un asesor te contactará pronto por este número.\n\n"
+                        f"También puedes escribir directamente al: {numero_asesor}\n\n"
+                        "Tu caso ha sido registrado para seguimiento."
+                    )
+                else:
+                    response_text = (
+                        "¡Entendido! 👍 Tu solicitud ha sido registrada.\n\n"
+                        "Un asesor te contactará pronto. "
+                        "Mientras tanto, dime en qué más puedo ayudarte."
+                    )
+                logger.info(f"         📤 Escalamiento creado para {from_number}")
             
-            response_text = gemini_service.get_response(content, context)
-            logger.info(f"         💡 Respuesta generada: {response_text[:100]}...")
+            # === TURNOS: Reservar turno ===
+            elif re.search(r'reservar\s*turno\s*(\d+)', content.lower()):
+                match = re.search(r'reservar\s*turno\s*(\d+)', content.lower())
+                if match:
+                    turno_id = int(match.group(1))
+                    db_service = DatabaseService()
+                    turno = db_service.reservar_turno(turno_id, conversation, from_number)
+                    if turno:
+                        response_text = (
+                            f"✅ ¡Listo manito! Turno reservado:\n"
+                            f"📅 {turno.servicio}\n"
+                            f"📆 {turno.fecha_turno}\n"
+                            f"🕐 {turno.hora_inicio.strftime('%H:%M')}\n\n"
+                            "Te esperamos. Si necesitas cancelar, escribe 'cancelar turno [número]'"
+                        )
+                        intent_detectado = 'reservar_turno'
+                    else:
+                        response_text = "Lo siento, ese turno ya no está disponible. Escribe 'turnos' para ver disponibilidad."
+            
+            # === TURNOS: Cancelar turno ===
+            elif re.search(r'cancelar\s*turno\s*(\d+)', content.lower()):
+                match = re.search(r'cancelar\s*turno\s*(\d+)', content.lower())
+                if match:
+                    turno_id = int(match.group(1))
+                    db_service = DatabaseService()
+                    ok = db_service.cancelar_turno(turno_id, from_number)
+                    if ok:
+                        response_text = "✅ Turno cancelado correctamente. Si necesitas otro, escribe 'turnos'."
+                        intent_detectado = 'cancelar_turno'
+                    else:
+                        response_text = "No pude cancelar ese turno. Verifica que sea uno de tus turnos reservados."
+            
+            # === Respuesta con Gemini para el resto ===
+            if response_text is None:
+                logger.info("         🤖 Generando respuesta con Gemini...")
+                gemini_service = GeminiService()
+                recent_messages = conversation.get_recent_messages(limit=5)
+                context = "\n".join([
+                    f"{'Usuario' if msg.direction == 'incoming' else 'Bot'}: {msg.content}"
+                    for msg in reversed(list(recent_messages))
+                ])
+                response_text = gemini_service.get_response(content, context, phone_number=from_number)
+                logger.info(f"         💡 Respuesta generada: {response_text[:100]}...")
+            
+            # === MÓDULO ANALÍTICO: Registrar consulta ===
+            try:
+                db_service = DatabaseService()
+                db_service.registrar_consulta_analitica(
+                    phone_number=from_number,
+                    motivo_consulta=content[:200],
+                    intent_detectado=intent_detectado,
+                    conversation=conversation,
+                    resuelto=(response_text is not None),
+                    metadata={}
+                )
+            except Exception as e:
+                logger.warning(f"Error registrando consulta analítica: {e}")
             
             # Enviar por WhatsApp
-            whatsapp_service = WhatsAppService()
             response_message_id = whatsapp_service.send_text_message(from_number, response_text)
             
             if response_message_id:
