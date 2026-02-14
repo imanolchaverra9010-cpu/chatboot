@@ -2,7 +2,6 @@
 Servicio para interactuar con Google Gemini AI - ESPECIALIZADO EN NEGOCIOS
 """
 import logging
-import time
 import google.generativeai as genai
 from django.conf import settings
 from .db_service import DatabaseService
@@ -420,25 +419,19 @@ class GeminiService:
         
         return context
     
-    def _generate_with_retry(self, prompt, max_retries=1, retry_delay=50):
+    def _generate_with_retry(self, prompt, max_retries=0, retry_delay=0):
         """
-        Llama a generate_content con reintento ante error 429 (cuota/rate limit).
-        Retorna None si se excedió la cuota tras los reintentos.
+        Llama a generate_content. Ante 429 (cuota), devuelve None de inmediato.
+        No se hace retry con espera: bloquearía el worker y causaría WORKER TIMEOUT de Gunicorn.
         """
-        for attempt in range(max_retries + 1):
-            try:
-                return self.model.generate_content(prompt)
-            except Exception as e:
-                is_429 = isinstance(e, ResourceExhausted) or getattr(e, 'code', None) == 429
-                if not is_429:
-                    raise
-                if attempt < max_retries:
-                    logger.warning(f"Gemini 429, reintentando en {retry_delay}s (intento {attempt + 1}/{max_retries + 1})")
-                    time.sleep(retry_delay)
-                else:
-                    logger.error(f"Gemini: cuota excedida tras {max_retries + 1} intentos: {e}")
-                    return None
-        return None
+        try:
+            return self.model.generate_content(prompt)
+        except Exception as e:
+            is_429 = isinstance(e, ResourceExhausted) or getattr(e, 'code', None) == 429
+            if is_429:
+                logger.warning(f"Gemini: cuota/rate limit excedido (429), sin retry para evitar timeout")
+                return None
+            raise
     
     def get_response(self, message, context=None, phone_number=None):
         """
