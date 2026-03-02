@@ -2,7 +2,9 @@
 Servicio MEJORADO para consultar la base de datos de Negocios
 """
 import logging
-from django.db import connection
+import re
+from django.conf import settings
+from django.db import connection, connections
 from django.db.models import Q, Count, Sum, Avg
 from datetime import datetime, time
 from ..models import (
@@ -20,6 +22,60 @@ class DatabaseService:
     
     # ==================== MÃ‰TODOS PARA NEGOCIOS ====================
     
+    @staticmethod
+    def consultar_puesto_votacion(documento):
+        """
+        Consulta puesto de votación por documento en la base externa de elecciones.
+        """
+        documento_limpio = re.sub(r"\D", "", str(documento or ""))
+        if not documento_limpio:
+            return None
+
+        db_alias = getattr(settings, "ELECTION_DB_ALIAS", "elecciones")
+        tabla = getattr(settings, "ELECTIONS_TABLE", "censo_electoral")
+        col_documento = getattr(settings, "ELECTIONS_DOCUMENT_COLUMN", "documento")
+        col_nombre = getattr(settings, "ELECTIONS_NAME_COLUMN", "nombre")
+        col_puesto = getattr(settings, "ELECTIONS_POLLING_PLACE_COLUMN", "puesto_votacion")
+        col_mesa = getattr(settings, "ELECTIONS_TABLE_NUMBER_COLUMN", "mesa")
+        col_direccion = getattr(settings, "ELECTIONS_ADDRESS_COLUMN", "direccion")
+        col_zona = getattr(settings, "ELECTIONS_ZONE_COLUMN", "zona")
+
+        if db_alias not in connections.databases:
+            logger.warning(f"No existe configuración de base de datos '{db_alias}' para elecciones.")
+            return None
+
+        query = f"""
+            SELECT
+                {col_documento},
+                {col_nombre},
+                {col_puesto},
+                {col_mesa},
+                {col_direccion},
+                {col_zona}
+            FROM {tabla}
+            WHERE {col_documento} = %s
+            LIMIT 1
+        """
+
+        try:
+            with connections[db_alias].cursor() as cursor:
+                cursor.execute(query, [documento_limpio])
+                row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "documento": row[0],
+                "nombre": row[1],
+                "puesto_votacion": row[2],
+                "mesa": row[3],
+                "direccion": row[4],
+                "zona": row[5],
+            }
+        except Exception as e:
+            logger.error(f"Error consultando puesto de votación para documento {documento_limpio}: {e}")
+            return None
     @staticmethod
     def buscar_negocios(query=None, categoria=None, ciudad='QuibdÃ³', activos=True, limit=1000):
         """
@@ -291,6 +347,60 @@ class DatabaseService:
             logger.error(f"Error obteniendo estadÃ­sticas: {e}")
             return None
     
+    @staticmethod
+    def consultar_puesto_votacion(documento):
+        """
+        Consulta puesto de votación por documento en la base externa de elecciones.
+        """
+        documento_limpio = re.sub(r"\D", "", str(documento or ""))
+        if not documento_limpio:
+            return None
+
+        db_alias = getattr(settings, "ELECTION_DB_ALIAS", "elecciones")
+        tabla = getattr(settings, "ELECTIONS_TABLE", "censo_electoral")
+        col_documento = getattr(settings, "ELECTIONS_DOCUMENT_COLUMN", "documento")
+        col_nombre = getattr(settings, "ELECTIONS_NAME_COLUMN", "nombre")
+        col_puesto = getattr(settings, "ELECTIONS_POLLING_PLACE_COLUMN", "puesto_votacion")
+        col_mesa = getattr(settings, "ELECTIONS_TABLE_NUMBER_COLUMN", "mesa")
+        col_direccion = getattr(settings, "ELECTIONS_ADDRESS_COLUMN", "direccion")
+        col_zona = getattr(settings, "ELECTIONS_ZONE_COLUMN", "zona")
+
+        if db_alias not in connections.databases:
+            logger.warning(f"No existe configuración de base de datos '{db_alias}' para elecciones.")
+            return None
+
+        query = f"""
+            SELECT
+                {col_documento},
+                {col_nombre},
+                {col_puesto},
+                {col_mesa},
+                {col_direccion},
+                {col_zona}
+            FROM {tabla}
+            WHERE {col_documento} = %s
+            LIMIT 1
+        """
+
+        try:
+            with connections[db_alias].cursor() as cursor:
+                cursor.execute(query, [documento_limpio])
+                row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "documento": row[0],
+                "nombre": row[1],
+                "puesto_votacion": row[2],
+                "mesa": row[3],
+                "direccion": row[4],
+                "zona": row[5],
+            }
+        except Exception as e:
+            logger.error(f"Error consultando puesto de votación para documento {documento_limpio}: {e}")
+            return None
     @staticmethod
     def buscar_negocios_cercanos(barrio=None, referencia=None, limit=1000):
         """Buscar negocios por ubicaciÃ³n aproximada"""
@@ -789,3 +899,4 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error obteniendo detalle pedido: {e}")
             return None
+

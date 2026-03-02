@@ -101,6 +101,30 @@ DATABASES = {
     }
 }
 
+# Base de datos externa para consultas de elecciones estudiantiles
+ELECTION_DB_ALIAS = 'elecciones'
+DATABASES[ELECTION_DB_ALIAS] = {
+    'ENGINE': 'django.db.backends.mysql',
+    'NAME': 'u659323332_puestos',
+    'USER': 'u659323332_puestos',
+    'PASSWORD': 'Puestos123@',
+    'HOST': '82.197.82.29',
+    'PORT': '3306',
+    'OPTIONS': {
+        'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        'charset': 'utf8mb4',
+    },
+}
+
+# Mapeo de tabla/columnas de censo electoral
+ELECTIONS_TABLE = os.getenv('ELECTIONS_TABLE', 'censo_electoral')
+ELECTIONS_DOCUMENT_COLUMN = os.getenv('ELECTIONS_DOCUMENT_COLUMN', 'documento')
+ELECTIONS_NAME_COLUMN = os.getenv('ELECTIONS_NAME_COLUMN', 'nombre')
+ELECTIONS_POLLING_PLACE_COLUMN = os.getenv('ELECTIONS_POLLING_PLACE_COLUMN', 'puesto_votacion')
+ELECTIONS_TABLE_NUMBER_COLUMN = os.getenv('ELECTIONS_TABLE_NUMBER_COLUMN', 'mesa')
+ELECTIONS_ADDRESS_COLUMN = os.getenv('ELECTIONS_ADDRESS_COLUMN', 'direccion')
+ELECTIONS_ZONE_COLUMN = os.getenv('ELECTIONS_ZONE_COLUMN', 'zona')
+
 
 # --- Password validation ---
 AUTH_PASSWORD_VALIDATORS = [

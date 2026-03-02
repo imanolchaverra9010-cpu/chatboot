@@ -285,6 +285,26 @@ def _process_multimedia(message_type, message_data, conversation, from_number):
                 pass
 
 
+def _extraer_documento(texto):
+    """Extrae un documento numÃ©rico entre 6 y 12 dÃ­gitos."""
+    if not texto:
+        return None
+    match = re.search(r"\b(\d{6,12})\b", texto)
+    return match.group(1) if match else None
+
+
+def _es_consulta_elecciones(texto):
+    """Detecta mensajes relacionados con elecciones/puesto de votaciÃ³n."""
+    if not texto:
+        return False
+    texto_limpio = texto.lower()
+    keywords = [
+        "eleccion", "elecciones", "votacion", "votaciÃ³n", "votar",
+        "puesto", "mesa", "jurado", "documento", "cedula", "cÃ©dula",
+    ]
+    return any(kw in texto_limpio for kw in keywords)
+
+
 def process_message(message_data, value):
     """
     Procesa un mensaje individual
@@ -372,10 +392,37 @@ def process_message(message_data, value):
             whatsapp_service = WhatsAppService()
             response_text = None
             intent_detectado = 'general'
-            
+            db_service = DatabaseService()
+
+            # === ELECCIONES ESTUDIANTILES: Consulta por documento ===
+            documento = _extraer_documento(content)
+            if documento:
+                info_votacion = db_service.consultar_puesto_votacion(documento)
+                if info_votacion:
+                    response_text = (
+                        "Informacion de votacion encontrada:\n"
+                        f"Nombre: {info_votacion.get('nombre') or 'No registrado'}\n"
+                        f"Documento: {info_votacion.get('documento')}\n"
+                        f"Puesto: {info_votacion.get('puesto_votacion') or 'No registrado'}\n"
+                        f"Mesa: {info_votacion.get('mesa') or 'No registrada'}\n"
+                        f"Direccion: {info_votacion.get('direccion') or 'No registrada'}\n"
+                        f"Zona: {info_votacion.get('zona') or 'No registrada'}"
+                    )
+                else:
+                    response_text = (
+                        "No encontré información de votación para ese documento.\n"
+                        "Verifica el número e inténtalo de nuevo."
+                    )
+                intent_detectado = 'consulta_puesto_votacion'
+            elif _es_consulta_elecciones(content):
+                response_text = (
+                    "Para consultarte el puesto de votación, envíame tu número de documento "
+                    "(solo números, sin puntos)."
+                )
+                intent_detectado = 'solicitar_documento_votacion'
+
             # === ESCALAMIENTO: Usuario pide hablar con humano ===
-            if content.strip().upper() == 'HUMANO' or 'hablar con humano' in content.lower() or 'asesor' in content.lower():
-                db_service = DatabaseService()
+            if response_text is None and (content.strip().upper() == 'HUMANO' or 'hablar con humano' in content.lower() or 'asesor' in content.lower()):
                 escalamiento = db_service.crear_escalamiento(
                     conversation=conversation,
                     motivo=f"Usuario solicitÃ³ hablar con humano: {content}",
@@ -406,11 +453,10 @@ def process_message(message_data, value):
                 logger.info(f"         ðŸ“¤ Escalamiento creado para {from_number}")
             
             # === TURNOS: Reservar turno ===
-            elif re.search(r'reservar\s*turno\s*(\d+)', content.lower()):
+            elif response_text is None and re.search(r'reservar\s*turno\s*(\d+)', content.lower()):
                 match = re.search(r'reservar\s*turno\s*(\d+)', content.lower())
                 if match:
                     turno_id = int(match.group(1))
-                    db_service = DatabaseService()
                     turno = db_service.reservar_turno(turno_id, conversation, from_number)
                     if turno:
                         response_text = (
@@ -425,11 +471,10 @@ def process_message(message_data, value):
                         response_text = "Lo siento, ese turno ya no estÃ¡ disponible. Escribe 'turnos' para ver disponibilidad."
             
             # === TURNOS: Cancelar turno ===
-            elif re.search(r'cancelar\s*turno\s*(\d+)', content.lower()):
+            elif response_text is None and re.search(r'cancelar\s*turno\s*(\d+)', content.lower()):
                 match = re.search(r'cancelar\s*turno\s*(\d+)', content.lower())
                 if match:
                     turno_id = int(match.group(1))
-                    db_service = DatabaseService()
                     ok = db_service.cancelar_turno(turno_id, from_number)
                     if ok:
                         response_text = "âœ… Turno cancelado correctamente. Si necesitas otro, escribe 'turnos'."
@@ -607,3 +652,9 @@ def status(request):
         },
         'test_url': request.build_absolute_uri('/chatbot/webhook/') + '?hub.mode=subscribe&hub.verify_token=my_secure_verify_token&hub.challenge=TEST123'
     })
+
+
+
+
+
+
