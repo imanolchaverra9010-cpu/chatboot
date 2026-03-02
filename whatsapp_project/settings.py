@@ -170,7 +170,7 @@ META_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN', 'my_secure_verify_token')
 META_WEBHOOK_SECRET = os.getenv('META_WEBHOOK_SECRET', '')
 
 # --- Gemini Configuration ---
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyCUni3L_9YtuWJkYe77Otcs-E4yTfUhrDs')
 
 # --- Escalamiento a Humano ---
 # Número de WhatsApp o CRM para escalar casos no resueltos
